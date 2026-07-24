@@ -1,0 +1,18 @@
+<svg width="512" height="128" viewBox="0 0 512 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&amp;display=swap');
+      .logo-text {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700;
+        font-size: 96px;
+        fill: #171717;
+      }
+    </style>
+    <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#21facf"/>
+      <stop offset="100%" stop-color="#0970ef"/>
+    </linearGradient>
+  </defs>
+  <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle" class="logo-text" fill="url(#textGradient)">Lemefy</text>
+</svg>

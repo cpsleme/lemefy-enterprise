@@ -1,0 +1,16 @@
+{{- if .Values.lemefy.imageVolume.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "lemefy.fullname" $ }}-images
+spec:
+  accessModes:
+    - {{ .Values.lemefy.imageVolume.accessModes }}
+{{- if .Values.lemefy.imageVolume.storageClassName }}
+  storageClassName: {{ .Values.lemefy.imageVolume.storageClassName }}
+{{- end }}          
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: {{ .Values.lemefy.imageVolume.size }}
+{{- end }}

@@ -1,0 +1,10 @@
+{{- if .Values.lemefy.configYamlContent }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "lemefy.fullname" $ }}-config
+data:
+  lemefy.yaml: |
+{{ .Values.lemefy.configYamlContent | indent 4 }}
+
+{{- end }}
