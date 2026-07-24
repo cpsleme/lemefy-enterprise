@@ -7,9 +7,16 @@ services:
     ports:
       - "${PORT}:${PORT}"
     depends_on:
-      - mongodb
-      - rag_api
-      - kaneo
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      rag_api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      kaneo:
+        condition: service_healthy
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,16 +30,14 @@ services:
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
-      - PREFECT_API_URL=http://prefect:4200/api
-      - PREFECT_API_KEY=${PREFECT_API_KEY:-}
       - KANEO_API_URL=http://kaneo:5173
       - PROXY=${PROXY:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
-      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,lemefy-vectordb,host.docker.internal
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
       - http_proxy=${http_proxy:-}
       - https_proxy=${https_proxy:-}
-      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,lemefy-vectordb,host.docker.internal
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
     volumes:
       - type: bind
         source: ./.env
@@ -41,13 +46,19 @@ services:
       - ./uploads:/app/uploads
       - ./logs:/app/logs
       - ./skill:/app/skill
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3080}/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
   admin-panel:
     container_name: admin-panel
     image: registry.librechat.ai/clickhouse/librechat-admin-panel:latest
     ports:
       - "${ADMIN_PANEL_PORT:-3000}:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: always
     environment:
       - PORT=3000
@@ -65,6 +76,12 @@ services:
     volumes:
       - ./data-node:/data/db
     command: mongod --noauth
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
   meilisearch:
     container_name: lemefy-meilisearch
     image: getmeili/meilisearch:v1.35.1
@@ -76,56 +93,103 @@ services:
       - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
     volumes:
       - ./meili_data_v1.35.1:/meili_data
-  vectordb:
-    container_name: lemefy-vectordb
-    image: pgvector/pgvector:0.8.0-pg15-trixie
-    environment:
-      POSTGRES_DB: mydatabase
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-    restart: always
-    volumes:
-      - pgdata2:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
   rag_api:
     container_name: lemefy-rag_api
     image: registry.librechat.ai/danny-avila/librechat-rag-api-dev-lite:latest
     environment:
-      - DB_HOST=vectordb
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - POSTGRES_DB=rag_api
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
       - RAG_PORT=${RAG_PORT:-8000}
     restart: always
     depends_on:
-      - vectordb
+      postgres:
+        condition: service_healthy
     env_file:
       - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${RAG_PORT:-8000}/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  prefect:
-    container_name: lemefy-prefect
-    image: prefecthq/prefect:latest-python3.11
-    command: prefect server start --host 0.0.0.0
+  temporal:
+    container_name: lemefy-temporal
+    image: temporalio/auto-setup:latest
     ports:
-      - "${PREFECT_PORT:-4200}:4200"
+      - "7233:7233"
+      - "8233:8233"
     environment:
-      - PREFECT_API_URL=http://prefect:4200/api
-      - PREFECT_UI_HOST=0.0.0.0
-      - PREFECT_SERVER_HOST=0.0.0.0
-      - PREFECT_LOG_LEVEL=INFO
-    volumes:
-      - prefect_data:/root/.prefect
-      - ./config/prefect:/etc/prefect
-    restart: always
+      - DB=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=${POSTGRES_PASSWORD:-postgres_password}
+      - POSTGRES_DB=temporal
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    restart: always
+    volumes:
+      - temporal_data:/tmp/temporal
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7233/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  temporal-worker:
+    container_name: lemefy-temporal-worker
+    build:
+      context: .
+      dockerfile: Dockerfile.temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=rag_api
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
+    depends_on:
+      temporal:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      rag_api:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "ps aux | grep 'node dist/worker.js' | grep -v grep"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   postgres:
     container_name: lemefy-postgres
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: prefect
-      POSTGRES_USER: prefect
-      POSTGRES_PASSWORD: ${PREFECT_DB_PASSWORD:-prefect_password}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
     volumes:
-      - prefect_pgdata:/var/lib/postgresql/data
+      - postgres_pgdata:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   lemefy:
     container_name: lemefy-lemefy
@@ -135,52 +199,49 @@ services:
     ports:
       - "${PORT:-3080}:${PORT:-3080}"
     environment:
-      - PREFECT_API_URL=http://prefect:4200
-      - PREFECT_API_KEY=${PREFECT_API_KEY:-}
       - KANEO_API_URL=${KANEO_API_URL:-}
-      - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
     depends_on:
-      - mongodb
-      - rag_api
-      - prefect
-      - vectordb
-      - kaneo
+      mongodb:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      rag_api:
+        condition: service_healthy
+      temporal-worker:
+        condition: service_healthy
+      kaneo:
+        condition: service_healthy
     restart: always
     env_file:
       - .env
-
-  kaneo-postgres:
-    container_name: lemefy-kaneo-postgres
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: kaneo
-      POSTGRES_USER: kaneo
-      POSTGRES_PASSWORD: ${KANEO_DB_PASSWORD:-kaneo_password}
-    volumes:
-      - kaneo_pgdata:/var/lib/postgresql/data
-    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3080}/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
   kaneo:
     container_name: lemefy-kaneo
     image: ghcr.io/usekaneo/kaneo:latest
     ports:
       - "${KANEO_PORT:-5173}:5173"
+    environment:
+      - DATABASE_URL=postgres://kaneo:${KANEO_DB_PASSWORD:-kaneo_password}@postgres:5432/kaneo
     env_file:
       - .env
     depends_on:
-      kaneo-postgres:
+      postgres:
         condition: service_healthy
     restart: always
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:5173/api/health"]
       interval: 30s
       timeout: 5s
-      start_period: 60s
-      retries: 3
+      retries: 5
+      start_period: 10s
 
 volumes:
-  pgdata2:
-  prefect_data:
-  prefect_pgdata:
-  kaneo_pgdata:
+  postgres_pgdata:
+  temporal_data:

@@ -1,8 +1,8 @@
-export { searchKnowledge, addKnowledgeDocument, getDocumentById, listDocuments, deleteDocument } from './service';
+export { searchKnowledge, addKnowledgeDocument, getDocumentById, listDocuments, deleteDocument, initializeDocuments } from './service';
 export const ragTools = [
   {
     name: 'search_knowledge',
-    description: 'Search the Lemefy knowledge base for FINOS, FinOps, and cloud governance documentation',
+    description: 'Search the Lemefy knowledge base for FINOS, FinOps, and cloud governance documentation. Returns ranked results with relevance scores.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -34,7 +34,7 @@ export const ragTools = [
   },
   {
     name: 'get_document',
-    description: 'Get a document by ID',
+    description: 'Get a document by ID from the knowledge base',
     inputSchema: {
       type: 'object',
       properties: {
@@ -45,7 +45,7 @@ export const ragTools = [
   },
   {
     name: 'list_documents',
-    description: 'List documents with optional filtering',
+    description: 'List documents in the knowledge base with optional filtering',
     inputSchema: {
       type: 'object',
       properties: {

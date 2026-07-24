@@ -1,16 +1,7 @@
-import { lemefyService } from '../index';
+import { lemefyService, lemefyMcpHandler } from '../index';
 
 describe('lemefy MCP handler', () => {
   describe('tools', () => {
-    it('should include Prefect tools', () => {
-      const toolNames = lemefyService.prefect.tools.map((t) => t.name);
-      expect(toolNames).toContain('list_flows');
-      expect(toolNames).toContain('trigger_flow');
-      expect(toolNames).toContain('list_runs');
-      expect(toolNames).toContain('get_run');
-      expect(toolNames).toContain('get_flow');
-    });
-
     it('should include Kaneo tools', () => {
       const toolNames = lemefyService.kaneo.tools.map((t) => t.name);
       expect(toolNames).toContain('create_project');

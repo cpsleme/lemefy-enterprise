@@ -9,7 +9,12 @@ services:
       - 3080:3080
     depends_on:
       - mongodb
+      - meilisearch
       - rag_api
+      - postgres
+      - temporal
+      - temporal-worker
+      - kaneo
     restart: always
     extra_hosts:
     - "host.docker.internal:host-gateway"
@@ -20,15 +25,15 @@ services:
       - NODE_ENV=production
       - MONGO_URI=mongodb://mongodb:27017/Lemefy
       - MEILI_HOST=http://meilisearch:7700
-      - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
+      - KANEO_API_URL=${KANEO_API_URL:-}
       - PROXY=${PROXY:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
-      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,lemefy-vectordb,host.docker.internal
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
       - http_proxy=${http_proxy:-}
       - https_proxy=${https_proxy:-}
-      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,lemefy-vectordb,host.docker.internal
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
       - ADMIN_PANEL_URL=${ADMIN_PANEL_URL:-http://admin.localhost}
     volumes:
       - type: bind
@@ -90,27 +95,82 @@ services:
       - MEILI_NO_ANALYTICS=true
     volumes:
       - ./meili_data_v1.35.1:/meili_data
-  vectordb:
-    container_name: lemefy-vectordb
-    image: pgvector/pgvector:0.8.0-pg15-trixie
+  postgres:
+    container_name: lemefy-postgres
+    image: postgres:15-alpine
     environment:
-      POSTGRES_DB: mydatabase
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+    volumes:
+      - postgres_pgdata:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+
+  temporal:
+    container_name: lemefy-temporal
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    environment:
+      - DB=postgres
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=${POSTGRES_PASSWORD:-postgres_password}
+      - POSTGRES_DB=temporal
+    depends_on:
+      - postgres
     restart: always
     volumes:
-      - pgdata2:/var/lib/postgresql/data
+      - temporal_data:/tmp/temporal
+
+  temporal-worker:
+    container_name: lemefy-temporal-worker
+    build:
+      context: .
+      dockerfile: Dockerfile.temporal
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=rag_api
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
+      - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
+    depends_on:
+      - temporal
+      - postgres
+      - rag_api
+    restart: always
+
   rag_api:
     container_name: lemefy-rag_api
     image: registry.librechat.ai/danny-avila/librechat-rag-api-dev-lite:latest
     environment:
-      - DB_HOST=vectordb
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - POSTGRES_DB=rag_api
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mypassword
       - RAG_PORT=${RAG_PORT:-8000}
     restart: always
     depends_on:
-      - vectordb
+      - postgres
     env_file:
       - .env
 
+  kaneo:
+    container_name: lemefy-kaneo
+    image: ghcr.io/usekaneo/kaneo:latest
+    ports:
+      - "${KANEO_PORT:-5173}:5173"
+    environment:
+      - DATABASE_URL=postgres://kaneo:${KANEO_DB_PASSWORD:-kaneo_password}@postgres:5432/kaneo
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: always
+
 volumes:
-  pgdata2:
+  postgres_pgdata:
+  temporal_data:

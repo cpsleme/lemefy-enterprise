@@ -1,4 +1,4 @@
-# Required as vectorDB for RAG
+# Required for RAG
 # provide context-aware responses based on user-uploaded files
 rag:
   enabled: true
@@ -8,30 +8,24 @@ rag:
     EMBEDDINGS_PROVIDER: openai
 
 image:
-  repository: danny-avila/lemefy-rag-api-dev-lite # there is rag-api-dev and rag-api-dev-lite. currently only lite is docuimented
+  repository: danny-avila/lemefy-rag-api-dev-lite
   registry: registry.lemefy.ai
   pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
   tag: latest
 
-# See https://github.com/bitnami/charts/blob/main/bitnami/postgresql/values.yaml for more details.
 postgresql:
   enabled: true
-  # nameOverride: vectordb
   image:
-    registry: ghcr.io
-    repository: bat-bs/bitnami-pgvector
-    tag: pg16
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: 16
   auth:
-    database: lemefy-vectordb
-    username: postgres
-    # define a secret with values for "postgres-password", "password" (user Password)  and "replication-password" or add values directly
-    existingSecret: lemefy-vectordb
-    # postgres-password is needed to enable pgvector extension. If you enable it manually you can use "password" and user "lemefy"
+    database: rag_api
+    username: myuser
+    existingSecret: lemefy-rag-db
     secretKeys:
-      userPasswordKey: postgres-password
+      userPasswordKey: password
       adminPasswordKey: postgres-password
-      replicationPasswordKey: postgres-password
 
 imagePullSecrets: []
 nameOverride: ''

@@ -8,7 +8,8 @@
     "client",
     "packages/data-provider",
     "packages/data-schemas",
-    "packages/api"
+    "packages/api",
+    "packages/temporal"
   ],
   "scripts": {
     "update": "node config/update.js",

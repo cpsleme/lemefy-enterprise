@@ -1,26 +1,25 @@
-import { createPrefectMCPHandler } from './workflows/prefect-mcp-handler';
 import { kaneoServer, kaneoTools } from './projects/kaneo-mcp';
-import { ragTools, searchKnowledge, addKnowledgeDocument, getDocumentById, listDocuments as listRagDocs, deleteDocument as deleteRagDoc } from './rag/mcp-tools';
+import { ragTools, searchKnowledge, addKnowledgeDocument, getDocumentById, listDocuments as listRagDocs, deleteDocument as deleteRagDoc, initializeDocuments } from './rag/mcp-tools';
 import { finopsService } from './finops/service';
 import { governanceService } from './governance/service';
 import { doraService, spaceService } from './governance/metrics';
-import type { LemefyProject, LemefyTask, LemefyKnowledgeArticle } from './types';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { z } from 'zod';
+import { createDocsProxy } from './workflows/docs-proxy';
+import type { LemefyKnowledgeArticle } from './types';
 
-const prefectHandler: {
-  tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
-  callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-} = createPrefectMCPHandler({
-  apiBaseUrl: process.env.PREFECT_API_URL ?? 'http://localhost:4200',
-  apiKey: process.env.PREFECT_API_KEY,
+const docsProxy = createDocsProxy({
+  url: process.env.FINOS_DOCS_MCP_URL ?? 'https://finos-docs-mcp.example.com',
+  initTimeout: 5_000,
 });
 
 const lemefyMcpTools = [
-  ...prefectHandler.tools,
   ...kaneoTools,
   ...ragTools,
+  ...docsProxy.tools,
 ];
+
+initializeDocuments().catch((error) => {
+  console.error('[lemefy] Failed to initialize documents:', error);
+});
 
 export const lemefyMcpHandler: {
   tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
@@ -30,12 +29,10 @@ export const lemefyMcpHandler: {
 
   async callTool(name: string, args: Record<string, unknown>) {
     switch (name) {
-      case 'list_flows':
-      case 'trigger_flow':
-      case 'list_runs':
-      case 'get_run':
-      case 'get_flow':
-        return prefectHandler.callTool(name, args);
+      case 'search_finos_docs':
+      case 'get_finos_standard': {
+        return docsProxy.callTool(name, args);
+      }
 
       case 'create_project':
       case 'get_project':
@@ -174,15 +171,8 @@ async function handleRagTool(
 }
 
 export const lemefyService: {
-  prefect: {
-    handler: {
-      tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
-      callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-    };
-    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
-  };
   kaneo: {
-    server: Record<string, (...args: unknown[]) => unknown>;
+    server: Record<string, unknown>;
     tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
   };
   rag: {
@@ -198,24 +188,20 @@ export const lemefyService: {
   dora: Record<string, (...args: unknown[]) => unknown>;
   space: Record<string, (...args: unknown[]) => unknown>;
 } = {
-  prefect: {
-    handler: prefectHandler,
-    tools: prefectHandler.tools,
-  },
   kaneo: {
-    server: kaneoServer,
+    server: kaneoServer as Record<string, unknown>,
     tools: kaneoTools,
   },
   rag: {
     tools: ragTools,
-    searchKnowledge,
-    addKnowledgeDocument,
-    getDocumentById,
-    listDocuments: listRagDocs,
-    deleteDocument: deleteRagDoc,
+    searchKnowledge: searchKnowledge as unknown as (...args: unknown[]) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>,
+    addKnowledgeDocument: addKnowledgeDocument as unknown as (...args: unknown[]) => Promise<void>,
+    getDocumentById: getDocumentById as unknown as (...args: unknown[]) => Promise<unknown>,
+    listDocuments: listRagDocs as unknown as (...args: unknown[]) => Promise<unknown[]>,
+    deleteDocument: deleteRagDoc as unknown as (...args: unknown[]) => Promise<boolean>,
   },
-  finops: finopsService,
-  governance: governanceService,
-  dora: doraService,
-  space: spaceService,
+  finops: finopsService as unknown as Record<string, (...args: unknown[]) => unknown>,
+  governance: governanceService as unknown as Record<string, (...args: unknown[]) => unknown>,
+  dora: doraService as unknown as Record<string, (...args: unknown[]) => unknown>,
+  space: spaceService as unknown as Record<string, (...args: unknown[]) => unknown>,
 };

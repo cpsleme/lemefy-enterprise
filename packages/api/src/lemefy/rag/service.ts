@@ -1,3 +1,4 @@
+import axios from 'axios';
 import type { LemefyKnowledgeArticle } from '../types';
 
 interface RagDocument {
@@ -24,6 +25,36 @@ interface RagSearchOptions {
   tags?: string[];
   limit?: number;
   threshold?: number;
+  fileId?: string;
+}
+
+interface RagApiQueryResult {
+  page_content: string;
+  metadata: {
+    file_id?: string;
+    source?: string;
+    category?: string;
+    tags?: string[];
+    [key: string]: unknown;
+  };
+}
+
+interface RagApiDocument {
+  id?: string;
+  file_id?: string;
+  filename?: string;
+  page_content?: string;
+  content?: string;
+  metadata?: {
+    source?: string;
+    category?: string;
+    tags?: string[];
+    [key: string]: unknown;
+  };
+}
+
+interface RagApiDocumentContext extends RagApiDocument {
+  file_id: string;
 }
 
 class InMemoryVectorStore {
@@ -201,12 +232,137 @@ function seedDocuments(): void {
 
 seedDocuments();
 
+export async function initializeDocuments(): Promise<void> {
+  const { DEFAULT_FINOS_SOURCES, ingestDocuments } = await import('./finos-ingestion.service');
+  await ingestDocuments(DEFAULT_FINOS_SOURCES);
+}
+
+function getRagApiBaseUrl(): string | undefined {
+  return process.env.RAG_API_URL?.replace(/\/$/, '');
+}
+
+async function ragApiQuery(fileId: string, query: string, k = 5): Promise<RagDocument[]> {
+  const baseUrl = getRagApiBaseUrl();
+  if (!baseUrl) {
+    return [];
+  }
+
+  const response = await axios.post(
+    `${baseUrl}/query`,
+    { query, file_id: fileId, k },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      timeout: 30_000,
+    },
+  );
+
+  const results = (response.data ?? []) as Array<[RagApiQueryResult, number]>;
+  return results.map(([docInfo, distance]) => ({
+    id: (docInfo.metadata?.file_id as string | undefined) ?? fileId,
+    title: String(docInfo.metadata?.source ?? '').split('/').pop() ?? 'RAG Document',
+    content: String(docInfo.page_content ?? ''),
+    source: String(docInfo.metadata?.source ?? 'rag_api'),
+    category: 'Query Result',
+    tags: ['rag-api'],
+    metadata: {
+      ...(docInfo.metadata as Record<string, unknown> | undefined),
+      distance,
+    },
+  }));
+}
+
+async function ragApiListDocuments(): Promise<RagDocument[]> {
+  const baseUrl = getRagApiBaseUrl();
+  if (!baseUrl) {
+    return [];
+  }
+
+  const response = await axios.get(`${baseUrl}/documents`, {
+    headers: {
+      accept: 'application/json',
+    },
+    timeout: 30_000,
+  });
+
+  const docs = response.data ?? [];
+  return docs.map((doc: RagApiDocument) => ({
+    id: String(doc.file_id ?? doc.id ?? '').trim(),
+    title: String(doc.filename ?? doc.file_id ?? 'Unknown').trim(),
+    content: String(doc.page_content ?? doc.content ?? '').trim(),
+    source: String(doc.metadata?.source ?? 'rag_api').trim(),
+    category: String(doc.metadata?.category ?? 'General').trim(),
+    tags: Array.isArray(doc.metadata?.tags) ? (doc.metadata.tags as string[]) : [],
+    metadata: (doc.metadata ?? {}) as Record<string, unknown>,
+  }));
+}
+
+async function ragApiGetDocument(id: string): Promise<RagDocument | null> {
+  const baseUrl = getRagApiBaseUrl();
+  if (!baseUrl) {
+    return null;
+  }
+
+  const response = await axios.get(`${baseUrl}/documents/${encodeURIComponent(id)}/context`, {
+    headers: {
+      accept: 'application/json',
+    },
+    timeout: 30_000,
+  });
+
+  const data = response.data as RagApiDocumentContext | null;
+  if (!data) {
+    return null;
+  }
+
+  const content = String(data.page_content ?? data.content ?? '').trim();
+  if (!content) {
+    return null;
+  }
+
+  return {
+    id: String(data.file_id ?? id).trim(),
+    title: String(data.metadata?.source ?? id).split('/').pop() ?? id,
+    content,
+    source: String(data.metadata?.source ?? 'rag_api').trim(),
+    category: String(data.metadata?.category ?? 'General').trim(),
+    tags: Array.isArray(data.metadata?.tags) ? (data.metadata.tags as string[]) : [],
+    metadata: (data.metadata ?? {}) as Record<string, unknown>,
+  };
+}
+
+async function ragApiDeleteDocument(id: string): Promise<boolean> {
+  const baseUrl = getRagApiBaseUrl();
+  if (!baseUrl) {
+    return false;
+  }
+
+  await axios.delete(`${baseUrl}/documents`, {
+    headers: {
+      'Content-Type': 'application/json',
+      accept: 'application/json',
+    },
+    data: [id],
+    timeout: 30_000,
+  });
+  return true;
+}
+
 export async function searchKnowledge(
   options: RagSearchOptions,
 ): Promise<RagQueryResult> {
   const startTime = Date.now();
+  const ragPromises: Promise<RagDocument[]>[] = [];
+  const memoryResults: RagDocument[] = vectorStore.search(options);
 
-  const documents = vectorStore.search(options);
+  if (options.fileId) {
+    ragPromises.push(ragApiQuery(options.fileId, options.query, options.limit ?? 5));
+  }
+
+  const ragDocuments = ragPromises.length > 0 ? await Promise.all(ragPromises).then((arr) => arr.flat()) : [];
+  const documents = [...ragDocuments, ...memoryResults];
 
   const latencyMs = Date.now() - startTime;
 
@@ -233,7 +389,12 @@ export async function addKnowledgeDocument(
 }
 
 export async function getDocumentById(id: string): Promise<RagDocument | null> {
-  return vectorStore.getAll().find((d) => d.id === id) ?? null;
+  const memoryDoc = vectorStore.getAll().find((d) => d.id === id) ?? null;
+  if (memoryDoc) {
+    return memoryDoc;
+  }
+
+  return ragApiGetDocument(id);
 }
 
 export async function listDocuments(params: {
@@ -242,6 +403,14 @@ export async function listDocuments(params: {
   limit?: number;
 }): Promise<RagDocument[]> {
   let docs = vectorStore.getAll();
+
+  try {
+    const ragDocs = await ragApiListDocuments();
+    docs = [...docs, ...ragDocs];
+  } catch {
+    // rag_api unavailable; fall back to in-memory docs
+  }
+
   if (params.category) {
     docs = docs.filter((d) => d.category === params.category);
   }
@@ -252,5 +421,14 @@ export async function listDocuments(params: {
 }
 
 export async function deleteDocument(id: string): Promise<boolean> {
-  return vectorStore.delete(id);
+  const deletedFromMemory = vectorStore.delete(id);
+  let deletedFromRag = false;
+
+  try {
+    deletedFromRag = await ragApiDeleteDocument(id);
+  } catch {
+    // rag_api unavailable; ignore
+  }
+
+  return deletedFromMemory || deletedFromRag;
 }

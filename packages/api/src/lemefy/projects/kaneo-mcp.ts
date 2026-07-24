@@ -1,16 +1,14 @@
 import { ProjectService } from './application/project-service';
 import { KaneoHttpClient } from './infrastructure/kaneo-http-client';
+import { UserWorkspaceService } from './infrastructure/user-workspace.service';
 import type { KaneoClient } from './domain/ports/kaneo-client.port';
 
 const kaneoBaseUrl = process.env.KANEO_API_URL ?? 'http://localhost:8001';
 const kaneoApiKey = process.env.KANEO_API_KEY;
 
 const kaneoClient = new KaneoHttpClient(kaneoBaseUrl, kaneoApiKey);
-const projectService = new ProjectService(kaneoClient, {
-  async getOrCreateWorkspace() {
-    throw new Error('Workspace creation must be handled by the application layer during user login');
-  },
-});
+const workspaceService = new UserWorkspaceService(kaneoClient);
+const projectService = new ProjectService(kaneoClient, workspaceService);
 
 export const kaneoServer = {
   async createProject(args: Record<string, unknown>) {
@@ -76,7 +74,7 @@ export const kaneoServer = {
 export const kaneoTools = [
   {
     name: 'create_project',
-    description: 'Create a new project with name, description, owner, and optional team and tags',
+    description: 'Create a new project with name, description, owner, and optional team and tags. Requires workspaceId.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -93,7 +91,7 @@ export const kaneoTools = [
   },
   {
     name: 'get_project',
-    description: 'Get a project by ID',
+    description: 'Get a project by ID. Returns null if not found.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -105,7 +103,7 @@ export const kaneoTools = [
   },
   {
     name: 'list_projects',
-    description: 'List projects with optional filtering',
+    description: 'List projects with optional filtering by owner, status, or search query.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,7 +119,7 @@ export const kaneoTools = [
   },
   {
     name: 'update_project',
-    description: 'Update a project',
+    description: 'Update a project. Returns null if project not found.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -138,7 +136,7 @@ export const kaneoTools = [
   },
   {
     name: 'delete_project',
-    description: 'Delete a project and all its tasks',
+    description: 'Delete a project and all its tasks.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -150,7 +148,7 @@ export const kaneoTools = [
   },
   {
     name: 'create_task',
-    description: 'Create a new task within a project',
+    description: 'Create a new task within a project.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -162,14 +160,14 @@ export const kaneoTools = [
         dueDate: { type: 'string', description: 'Due date as ISO string' },
         priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
         tags: { type: 'array', items: { type: 'string' } },
-        workflowId: { type: 'string', description: 'Prefect workflow ID to link' },
+        workflowId: { type: 'string', description: 'Temporal workflow ID to link' },
       },
       required: ['workspaceId', 'projectId', 'title', 'assignee', 'dueDate'],
     },
   },
   {
     name: 'get_task',
-    description: 'Get a task by ID',
+    description: 'Get a task by ID. Returns null if not found.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -181,7 +179,7 @@ export const kaneoTools = [
   },
   {
     name: 'list_tasks',
-    description: 'List tasks with optional filtering',
+    description: 'List tasks with optional filtering by project, status, assignee, or search query.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -199,7 +197,7 @@ export const kaneoTools = [
   },
   {
     name: 'update_task',
-    description: 'Update a task',
+    description: 'Update a task. Returns null if task not found.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -212,14 +210,14 @@ export const kaneoTools = [
         assignee: { type: 'string', description: 'Assignee user ID' },
         dueDate: { type: 'string', description: 'Due date as ISO string' },
         tags: { type: 'array', items: { type: 'string' } },
-        workflowId: { type: 'string', description: 'Prefect workflow ID' },
+        workflowId: { type: 'string', description: 'Temporal workflow ID' },
       },
       required: ['workspaceId', 'id'],
     },
   },
   {
     name: 'delete_task',
-    description: 'Delete a task',
+    description: 'Delete a task.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -231,13 +229,13 @@ export const kaneoTools = [
   },
   {
     name: 'link_workflow',
-    description: 'Link a task to a Prefect workflow',
+    description: 'Link a task to a Temporal workflow.',
     inputSchema: {
       type: 'object',
       properties: {
         workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         taskId: { type: 'string', description: 'Task ID' },
-        workflowId: { type: 'string', description: 'Prefect workflow/flow ID' },
+        workflowId: { type: 'string', description: 'Temporal workflow ID' },
       },
       required: ['workspaceId', 'taskId', 'workflowId'],
     },

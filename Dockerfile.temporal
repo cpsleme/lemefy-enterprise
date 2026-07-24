@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+RUN corepack enable && corepack prepare pnpm@10.32.1 --activate
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml ./
+COPY packages/temporal/package.json ./packages/temporal/
+
+RUN pnpm install --filter @lemefy/temporal...
+
+COPY packages/temporal ./packages/temporal
+COPY tsconfig.base.json ./
+
+RUN pnpm --filter @lemefy/temporal build
+
+WORKDIR /app/packages/temporal
+
+CMD ["node", "dist/worker.js"]

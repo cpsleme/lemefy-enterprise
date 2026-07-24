@@ -1,31 +1,32 @@
 version: '3.8'
 
 services:
-  vectordb:
-    image: pgvector/pgvector:0.8.0-pg15-trixie
+  postgres:
+    image: postgres:15-alpine
     environment:
-      POSTGRES_DB: mydatabase
+      POSTGRES_DB: rag_api
       POSTGRES_USER: myuser
       POSTGRES_PASSWORD: mypassword
     volumes:
-      - pgdata2:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     ports:
       - "5433:5432"
 
   rag_api:
     image: registry.librechat.ai/danny-avila/librechat-rag-api-dev:latest
     environment:
-      - DB_HOST=vectordb
+      - DB_HOST=postgres
       - DB_PORT=5432
-      - POSTGRES_DB=mydatabase
+      - POSTGRES_DB=rag_api
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mypassword
+      - RAG_PORT=${RAG_PORT:-8000}
     ports:
       - "${RAG_PORT}:${RAG_PORT}"
     depends_on:
-      - vectordb
+      - postgres
     env_file:
       - .env
 
 volumes:
-  pgdata2:
+  pgdata:

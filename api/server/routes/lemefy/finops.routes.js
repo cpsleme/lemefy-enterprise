@@ -49,4 +49,31 @@ router.get('/finops/cost-by-service', async (req, res) => {
   }
 });
 
+router.post('/finops/ingest', async (req, res) => {
+  try {
+    const { provider, credentials, projectId, costCenter, periodStart, periodEnd } = req.body;
+    if (!provider || !projectId || !periodStart || !periodEnd) {
+      return res.status(400).json({
+        error: 'provider, projectId, periodStart, and periodEnd are required',
+      });
+    }
+
+    const entries = await lemefyService.finops.ingestProviderCosts(
+      provider,
+      credentials,
+      projectId,
+      costCenter ?? 'default',
+      periodStart,
+      periodEnd,
+      req.body.granularity ?? 'DAILY',
+    );
+
+    await lemefyService.finops.ingestCostData(entries);
+    res.status(201).json({ ingested: entries.length, entries });
+  } catch (error) {
+    logger.error('[lemefy] Error ingesting FinOps costs', error);
+    res.status(500).json({ error: 'Error ingesting FinOps costs' });
+  }
+});
+
 module.exports = router;

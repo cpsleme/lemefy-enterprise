@@ -40,6 +40,13 @@ export class KaneoHttpClient implements KaneoClient {
     });
   }
 
+  async listWorkspaces(owner?: string): Promise<KaneoWorkspace[]> {
+    const search = new URLSearchParams();
+    if (owner) search.set('owner', owner);
+    const qs = search.toString();
+    return this.request<KaneoWorkspace[]>(`/api/workspaces${qs ? `?${qs}` : ''}`);
+  }
+
   async createProject(workspaceId: string, input: CreateProjectInput): Promise<Project> {
     return this.request<Project>(`/api/workspaces/${encodeURIComponent(workspaceId)}/projects`, {
       method: 'POST',

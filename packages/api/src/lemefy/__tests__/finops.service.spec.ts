@@ -1,4 +1,4 @@
-import { finopsService } from '../service';
+import { finopsService } from '../finops/service';
 
 describe('finopsService', () => {
   beforeEach(() => {
