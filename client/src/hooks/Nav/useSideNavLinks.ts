@@ -7,13 +7,13 @@ import {
   NotebookPen,
   ScrollText,
   ArrowRightToLine,
-  SlidersHorizontal,
+  Building2,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   Permissions,
   EModelEndpoint,
   PermissionTypes,
-  isParamEndpoint,
   isAgentsEndpoint,
   isAssistantsEndpoint,
 } from 'lemefy-data-provider';
@@ -25,11 +25,11 @@ import {
   useGetAgentsConfig,
   useHasAccess,
 } from '~/hooks';
+import { useActivePanel } from '~/Providers';
 import MCPBuilderPanel from '~/components/SidePanel/MCPBuilder/MCPBuilderPanel';
 import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
 import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
 import PanelSwitch from '~/components/SidePanel/Builder/PanelSwitch';
-import Parameters from '~/components/SidePanel/Parameters/Panel';
 import { MemoryPanel } from '~/components/SidePanel/Memories';
 import FilesPanel from '~/components/SidePanel/Files/Panel';
 import { PromptsAccordion } from '~/components/Prompts';
@@ -52,6 +52,9 @@ export default function useSideNavLinks({
   endpointsConfig: TEndpointsConfig;
   includeHidePanel?: boolean;
 }) {
+  const navigate = useNavigate();
+  const { setActive } = useActivePanel();
+
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,
     permission: Permissions.USE,
@@ -179,21 +182,6 @@ export default function useSideNavLinks({
     });
 
     if (
-      interfaceConfig.parameters === true &&
-      isParamEndpoint(endpoint ?? '', endpointType ?? '') === true &&
-      !isAgentsEndpoint(endpoint) &&
-      keyProvided
-    ) {
-      links.push({
-        title: 'com_sidepanel_parameters',
-        label: '',
-        icon: SlidersHorizontal,
-        id: 'parameters',
-        Component: Parameters,
-      });
-    }
-
-    if (
       (hasAccessToUseMCPSettings && availableMCPServers && availableMCPServers.length > 0) ||
       hasAccessToCreateMCP
     ) {
@@ -205,6 +193,20 @@ export default function useSideNavLinks({
         Component: MCPBuilderPanel,
       });
     }
+
+    links.push({
+      title: 'com_ui_lemefy',
+      label: '',
+      icon: Building2,
+      id: 'lemefy',
+      onClick: (e?: React.MouseEvent) => {
+        navigate('/lemefy');
+        setActive('lemefy');
+        if (e?.currentTarget instanceof HTMLElement) {
+          e.currentTarget.blur();
+        }
+      },
+    });
 
     if (includeHidePanel && hidePanel) {
       links.push({
@@ -228,7 +230,6 @@ export default function useSideNavLinks({
     skillsEnabled,
     hasAccessToMemories,
     hasAccessToReadMemories,
-    interfaceConfig.parameters,
     endpointType,
     hasAccessToBookmarks,
     availableMCPServers,
