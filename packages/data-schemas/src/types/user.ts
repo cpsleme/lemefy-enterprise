@@ -62,6 +62,7 @@ export interface IUser extends Document {
   tenantId?: string;
   federatedTokens?: OIDCTokens;
   openidTokens?: OIDCTokens;
+  kaneoWorkspaceId?: string;
 }
 
 export interface OIDCTokens {

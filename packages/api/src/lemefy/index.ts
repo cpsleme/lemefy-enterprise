@@ -4,7 +4,7 @@ import { ragTools, searchKnowledge, addKnowledgeDocument, getDocumentById, listD
 import { finopsService } from './finops/service';
 import { governanceService } from './governance/service';
 import { doraService, spaceService } from './governance/metrics';
-import type { LemefyProject, LemefyTask } from './types';
+import type { LemefyProject, LemefyTask, LemefyKnowledgeArticle } from './types';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { z } from 'zod';
 
@@ -68,68 +68,68 @@ export const lemefyMcpHandler: {
   },
 };
 
-function handleKaneoTool(
+async function handleKaneoTool(
   name: string,
   args: Record<string, unknown>,
-): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   switch (name) {
     case 'create_project': {
-      const input = args as { name: string; owner: string; description?: string; team?: string[]; tags?: string[]; dueDate?: string };
-      const project = kaneoServer.createProject(input);
+      const input = args as { workspaceId: string; name: string; owner: string; description?: string; team?: string[]; tags?: string[]; dueDate?: string };
+      const project = await kaneoServer.createProject(input);
       return { content: [{ type: 'text', text: `Project created: ${project.name} (id: ${project.id})` }] };
     }
     case 'get_project': {
-      const { id } = args as { id: string };
-      const project = kaneoServer.getProject(id);
+      const { workspaceId, id } = args as { workspaceId: string; id: string };
+      const project = await kaneoServer.getProject(id, { workspaceId });
       if (!project) return { content: [{ type: 'text', text: `Project not found: ${id}` }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(project, null, 2) }] };
     }
     case 'list_projects': {
-      const { owner, status, search, limit, offset } = args as { owner?: string; status?: string; search?: string; limit?: number; offset?: number };
-      const result = kaneoServer.listProjects({ owner, status, search, limit, offset });
+      const { workspaceId, owner, status, search, limit, offset } = args as { workspaceId: string; owner?: string; status?: string; search?: string; limit?: number; offset?: number };
+      const result = await kaneoServer.listProjects({ workspaceId, owner, status, search, limit, offset });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'update_project': {
-      const { id, ...rest } = args as { id: string; [key: string]: unknown };
-      const project = kaneoServer.updateProject(id, rest);
+      const { workspaceId, id, ...rest } = args as { workspaceId: string; id: string; [key: string]: unknown };
+      const project = await kaneoServer.updateProject(id, { workspaceId, ...rest });
       if (!project) return { content: [{ type: 'text', text: `Project not found: ${id}` }], isError: true };
       return { content: [{ type: 'text', text: `Project updated: ${project.name}` }] };
     }
     case 'delete_project': {
-      const { id } = args as { id: string };
-      const deleted = kaneoServer.deleteProject(id);
+      const { workspaceId, id } = args as { workspaceId: string; id: string };
+      const deleted = await kaneoServer.deleteProject(id, { workspaceId });
       return { content: [{ type: 'text', text: deleted ? `Project deleted: ${id}` : `Project not found: ${id}` }] };
     }
     case 'create_task': {
-      const input = args as { projectId: string; title: string; assignee: string; dueDate: string; description?: string; priority?: string; tags?: string[] };
-      const task = kaneoServer.createTask(input);
+      const input = args as { workspaceId: string; projectId: string; title: string; assignee: string; dueDate: string; description?: string; priority?: string; tags?: string[] };
+      const task = await kaneoServer.createTask(input);
       return { content: [{ type: 'text', text: `Task created: ${task.title} (id: ${task.id})` }] };
     }
     case 'get_task': {
-      const { id } = args as { id: string };
-      const task = kaneoServer.getTask(id);
+      const { workspaceId, id } = args as { workspaceId: string; id: string };
+      const task = await kaneoServer.getTask(id, { workspaceId });
       if (!task) return { content: [{ type: 'text', text: `Task not found: ${id}` }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(task, null, 2) }] };
     }
     case 'list_tasks': {
-      const { projectId, status, assignee, search, limit, offset } = args as { projectId?: string; status?: string; assignee?: string; search?: string; limit?: number; offset?: number };
-      const result = kaneoServer.listTasks({ projectId, status, assignee, search, limit, offset });
+      const { workspaceId, projectId, status, assignee, search, limit, offset } = args as { workspaceId: string; projectId?: string; status?: string; assignee?: string; search?: string; limit?: number; offset?: number };
+      const result = await kaneoServer.listTasks({ workspaceId, projectId, status, assignee, search, limit, offset });
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
     }
     case 'update_task': {
-      const { id, ...rest } = args as { id: string; [key: string]: unknown };
-      const task = kaneoServer.updateTask(id, rest);
+      const { workspaceId, id, ...rest } = args as { workspaceId: string; id: string; [key: string]: unknown };
+      const task = await kaneoServer.updateTask(id, { workspaceId, ...rest });
       if (!task) return { content: [{ type: 'text', text: `Task not found: ${id}` }], isError: true };
       return { content: [{ type: 'text', text: `Task updated: ${task.title}` }] };
     }
     case 'delete_task': {
-      const { id } = args as { id: string };
-      const deleted = kaneoServer.deleteTask(id);
+      const { workspaceId, id } = args as { workspaceId: string; id: string };
+      const deleted = await kaneoServer.deleteTask(id, { workspaceId });
       return { content: [{ type: 'text', text: deleted ? `Task deleted: ${id}` : `Task not found: ${id}` }] };
     }
     case 'link_workflow': {
-      const { taskId, workflowId } = args as { taskId: string; workflowId: string };
-      const linked = kaneoServer.linkWorkflow(taskId, workflowId);
+      const { workspaceId, taskId, workflowId } = args as { workspaceId: string; taskId: string; workflowId: string };
+      const linked = await kaneoServer.linkWorkflow(taskId, workflowId, { workspaceId });
       return { content: [{ type: 'text', text: linked ? `Task ${taskId} linked to workflow ${workflowId}` : `Task not found: ${taskId}` }] };
     }
     default:
@@ -137,35 +137,35 @@ function handleKaneoTool(
   }
 }
 
-function handleRagTool(
+async function handleRagTool(
   name: string,
   args: Record<string, unknown>,
-): { content: Array<{ type: string; text: string }>; isError?: boolean } {
+): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   switch (name) {
     case 'search_knowledge': {
       const { query, category, source, tags, limit, threshold } = args as { query: string; category?: string; source?: string; tags?: string[]; limit?: number; threshold?: number };
-      const results = searchKnowledge({ query, category, source, tags, limit, threshold });
+      const results = await searchKnowledge({ query, category, source, tags, limit, threshold });
       return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
     }
     case 'add_document': {
       const doc = args as LemefyKnowledgeArticle;
-      addKnowledgeDocument(doc);
+      await addKnowledgeDocument(doc);
       return { content: [{ type: 'text', text: `Document added: ${doc.title}` }] };
     }
     case 'get_document': {
       const { id } = args as { id: string };
-      const doc = getDocumentById(id);
+      const doc = await getDocumentById(id);
       if (!doc) return { content: [{ type: 'text', text: `Document not found: ${id}` }], isError: true };
       return { content: [{ type: 'text', text: JSON.stringify(doc, null, 2) }] };
     }
     case 'list_documents': {
       const { category, source, limit } = args as { category?: string; source?: string; limit?: number };
-      const docs = listRagDocs({ category, source, limit });
+      const docs = await listRagDocs({ category, source, limit });
       return { content: [{ type: 'text', text: JSON.stringify(docs, null, 2) }] };
     }
     case 'delete_document': {
       const { id } = args as { id: string };
-      const deleted = deleteRagDoc(id);
+      const deleted = await deleteRagDoc(id);
       return { content: [{ type: 'text', text: deleted ? `Document deleted: ${id}` : `Document not found: ${id}` }] };
     }
     default:
@@ -182,21 +182,21 @@ export const lemefyService: {
     tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
   };
   kaneo: {
-    server: { createProject: (input: unknown) => unknown; getProject: (id: string) => unknown; listProjects: (input: unknown) => unknown; updateProject: (id: string, input: unknown) => unknown; deleteProject: (id: string) => unknown; createTask: (input: unknown) => unknown; getTask: (id: string) => unknown; listTasks: (input: unknown) => unknown; updateTask: (id: string, input: unknown) => unknown; deleteTask: (id: string) => unknown; linkWorkflow: (taskId: string, workflowId: string) => unknown; };
+    server: Record<string, (...args: unknown[]) => unknown>;
     tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
   };
   rag: {
     tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
-    searchKnowledge: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-    addKnowledgeDocument: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-    getDocumentById: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-    listDocuments: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
-    deleteDocument: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    searchKnowledge: (...args: unknown[]) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    addKnowledgeDocument: (...args: unknown[]) => Promise<void>;
+    getDocumentById: (...args: unknown[]) => Promise<unknown>;
+    listDocuments: (...args: unknown[]) => Promise<unknown[]>;
+    deleteDocument: (...args: unknown[]) => Promise<boolean>;
   };
-  finops: { ingestCostData: (data: unknown[]) => void; getCostReport: (params: unknown) => { totalCost: number; breakdown: Array<{ service: string; cost: number }>; recommendations: Array<{ id: string; title: string }>; periodStart: string; periodEnd: string }; getRecommendations: (projectId: string) => Array<{ id: string; title: string; estimatedSavings: number }>; getCostByService: (params: unknown) => Array<{ service: string; cost: number }>; };
-  governance: { getPolicies: (standard?: string) => Array<{ id: string; name: string; standard: string; controls: Array<{ id: string; name: string; status: string }> }>; getPolicy: (id: string) => { id: string; name: string; controls: Array<{ id: string; name: string; status: string }> } | undefined; updateControl: (policyId: string, controlId: string, updates: Record<string, unknown>) => { id: string; name: string; status: string } | undefined; checkCompliance: (policyId: string) => { score: number; status: string; controls: Array<{ id: string; name: string; status: string }> }; assessAllPolicies: () => Array<{ id: string; name: string; score: number; status: string }>; };
-  dora: { getMetrics: (params: unknown) => Array<{ name: string; value: number; unit: string; trend: string }>; recordDeployEvent: (event: unknown) => void; };
-  space: { getMetrics: (team: string, period: string) => Array<{ name: string; value: number; unit: string; trend: string }>; recordSurvey: (survey: unknown) => void; };
+  finops: Record<string, (...args: unknown[]) => unknown>;
+  governance: Record<string, (...args: unknown[]) => unknown>;
+  dora: Record<string, (...args: unknown[]) => unknown>;
+  space: Record<string, (...args: unknown[]) => unknown>;
 } = {
   prefect: {
     handler: prefectHandler,

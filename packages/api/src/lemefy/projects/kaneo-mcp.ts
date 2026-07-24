@@ -1,278 +1,77 @@
-import type { LemefyProject, LemefyTask } from '../types';
+import { ProjectService } from './application/project-service';
+import { KaneoHttpClient } from './infrastructure/kaneo-http-client';
+import type { KaneoClient } from './domain/ports/kaneo-client.port';
 
-interface KaneoProject {
-  id: string;
-  name: string;
-  description: string;
-  owner: string;
-  team: string[];
-  tags: string[];
-  status: 'active' | 'archived' | 'planning';
-  dueDate?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+const kaneoBaseUrl = process.env.KANEO_API_URL ?? 'http://localhost:8001';
+const kaneoApiKey = process.env.KANEO_API_KEY;
 
-interface KaneoTask {
-  id: string;
-  projectId: string;
-  title: string;
-  description: string;
-  status: 'todo' | 'in-progress' | 'review' | 'done' | 'cancelled';
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  assignee: string;
-  dueDate: string;
-  tags: string[];
-  workflowId?: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-}
+const kaneoClient = new KaneoHttpClient(kaneoBaseUrl, kaneoApiKey);
+const projectService = new ProjectService(kaneoClient, {
+  async getOrCreateWorkspace() {
+    throw new Error('Workspace creation must be handled by the application layer during user login');
+  },
+});
 
-interface KaneoCreateProjectInput {
-  name: string;
-  description?: string;
-  owner: string;
-  team?: string[];
-  tags?: string[];
-  dueDate?: string;
-}
+export const kaneoServer = {
+  async createProject(args: Record<string, unknown>) {
+    const { workspaceId, ...input } = args as { workspaceId: string } & Record<string, unknown>;
+    return projectService.createProject(workspaceId, input as never);
+  },
 
-interface KaneoCreateTaskInput {
-  projectId: string;
-  title: string;
-  description?: string;
-  assignee: string;
-  dueDate: string;
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  tags?: string[];
-  workflowId?: string;
-}
+  async getProject(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    return projectService.getProject(workspaceId, id);
+  },
 
-interface KaneoUpdateProjectInput {
-  name?: string;
-  description?: string;
-  status?: 'active' | 'archived' | 'planning';
-  tags?: string[];
-  team?: string[];
-}
+  async listProjects(args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    const { ...params } = args as Record<string, unknown>;
+    return projectService.listProjects(workspaceId, params as never);
+  },
 
-interface KaneoUpdateTaskInput {
-  title?: string;
-  description?: string;
-  status?: 'todo' | 'in-progress' | 'review' | 'done' | 'cancelled';
-  priority?: 'low' | 'medium' | 'high' | 'critical';
-  assignee?: string;
-  dueDate?: string;
-  tags?: string[];
-  workflowId?: string;
-}
+  async updateProject(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    const { ...input } = args as Record<string, unknown>;
+    return projectService.updateProject(workspaceId, id, input as never);
+  },
 
-class KaneoMCPServer {
-  private projects: Map<string, KaneoProject>;
-  private tasks: Map<string, KaneoTask>;
-  private projectIdCounter: number;
-  private taskIdCounter: number;
+  async deleteProject(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    return projectService.deleteProject(workspaceId, id);
+  },
 
-  constructor() {
-    this.projects = new Map();
-    this.tasks = new Map();
-    this.projectIdCounter = 1;
-    this.taskIdCounter = 1;
-  }
+  async createTask(args: Record<string, unknown>) {
+    const { workspaceId, ...input } = args as { workspaceId: string } & Record<string, unknown>;
+    return projectService.createTask(workspaceId, input as never);
+  },
 
-  createProject(input: KaneoCreateProjectInput): KaneoProject {
-    const id = `proj-${this.projectIdCounter++}`;
-    const now = new Date().toISOString();
+  async getTask(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    return projectService.getTask(workspaceId, id);
+  },
 
-    const project: KaneoProject = {
-      id,
-      name: input.name,
-      description: input.description ?? '',
-      owner: input.owner,
-      team: input.team ?? [],
-      tags: input.tags ?? [],
-      status: 'active',
-      dueDate: input.dueDate,
-      createdAt: now,
-      updatedAt: now,
-    };
+  async listTasks(args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    const { ...params } = args as Record<string, unknown>;
+    return projectService.listTasks(workspaceId, params as never);
+  },
 
-    this.projects.set(id, project);
-    return project;
-  }
+  async updateTask(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    const { ...input } = args as Record<string, unknown>;
+    return projectService.updateTask(workspaceId, id, input as never);
+  },
 
-  getProject(id: string): KaneoProject | null {
-    return this.projects.get(id) ?? null;
-  }
+  async deleteTask(id: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    return projectService.deleteTask(workspaceId, id);
+  },
 
-  listProjects(params: {
-    owner?: string;
-    status?: string;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  }): { projects: KaneoProject[]; total: number } {
-    let results = Array.from(this.projects.values());
-
-    if (params.owner) {
-      results = results.filter((p) => p.owner === params.owner);
-    }
-    if (params.status) {
-      results = results.filter((p) => p.status === params.status);
-    }
-    if (params.search) {
-      const q = params.search.toLowerCase();
-      results = results.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q),
-      );
-    }
-
-    const total = results.length;
-    const offset = params.offset ?? 0;
-    const limit = params.limit ?? 25;
-    const sliced = results.slice(offset, offset + limit);
-
-    return { projects: sliced, total };
-  }
-
-  updateProject(id: string, input: KaneoUpdateProjectInput): KaneoProject | null {
-    const project = this.projects.get(id);
-    if (!project) return null;
-
-    if (input.name !== undefined) project.name = input.name;
-    if (input.description !== undefined) project.description = input.description;
-    if (input.status !== undefined) project.status = input.status;
-    if (input.tags !== undefined) project.tags = input.tags;
-    if (input.team !== undefined) project.team = input.team;
-    project.updatedAt = new Date().toISOString();
-
-    this.projects.set(id, project);
-    return project;
-  }
-
-  deleteProject(id: string): boolean {
-    const existed = this.projects.has(id);
-    if (existed) {
-      this.projects.delete(id);
-      for (const [taskId, task] of this.tasks) {
-        if (task.projectId === id) {
-          this.tasks.delete(taskId);
-        }
-      }
-    }
-    return existed;
-  }
-
-  createTask(input: KaneoCreateTaskInput): KaneoTask {
-    const id = `task-${this.taskIdCounter++}`;
-    const now = new Date().toISOString();
-
-    const task: KaneoTask = {
-      id,
-      projectId: input.projectId,
-      title: input.title,
-      description: input.description ?? '',
-      status: 'todo',
-      priority: input.priority ?? 'medium',
-      assignee: input.assignee,
-      dueDate: input.dueDate,
-      tags: input.tags ?? [],
-      workflowId: input.workflowId,
-      metadata: {},
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    this.tasks.set(id, task);
-    return task;
-  }
-
-  getTask(id: string): KaneoTask | null {
-    return this.tasks.get(id) ?? null;
-  }
-
-  listTasks(params: {
-    projectId?: string;
-    status?: string;
-    assignee?: string;
-    priority?: string;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  }): { tasks: KaneoTask[]; total: number } {
-    let results = Array.from(this.tasks.values());
-
-    if (params.projectId) {
-      results = results.filter((t) => t.projectId === params.projectId);
-    }
-    if (params.status) {
-      results = results.filter((t) => t.status === params.status);
-    }
-    if (params.assignee) {
-      results = results.filter((t) => t.assignee === params.assignee);
-    }
-    if (params.priority) {
-      results = results.filter((t) => t.priority === params.priority);
-    }
-    if (params.search) {
-      const q = params.search.toLowerCase();
-      results = results.filter(
-        (t) =>
-          t.title.toLowerCase().includes(q) ||
-          t.description.toLowerCase().includes(q),
-      );
-    }
-
-    const total = results.length;
-    const offset = params.offset ?? 0;
-    const limit = params.limit ?? 25;
-    const sliced = results.slice(offset, offset + limit);
-
-    return { tasks: sliced, total };
-  }
-
-  updateTask(id: string, input: KaneoUpdateTaskInput): KaneoTask | null {
-    const task = this.tasks.get(id);
-    if (!task) return null;
-
-    if (input.title !== undefined) task.title = input.title;
-    if (input.description !== undefined) task.description = input.description;
-    if (input.status !== undefined) task.status = input.status;
-    if (input.priority !== undefined) task.priority = input.priority;
-    if (input.assignee !== undefined) task.assignee = input.assignee;
-    if (input.dueDate !== undefined) task.dueDate = input.dueDate;
-    if (input.tags !== undefined) task.tags = input.tags;
-    if (input.workflowId !== undefined) task.workflowId = input.workflowId;
-    task.updatedAt = new Date().toISOString();
-
-    this.tasks.set(id, task);
-    return task;
-  }
-
-  deleteTask(id: string): boolean {
-    return this.tasks.delete(id);
-  }
-
-  linkWorkflow(taskId: string, workflowId: string): boolean {
-    const task = this.tasks.get(taskId);
-    if (!task) return false;
-    task.workflowId = workflowId;
-    task.updatedAt = new Date().toISOString();
-    this.tasks.set(taskId, task);
-    return true;
-  }
-
-  getProjectTasks(projectId: string): KaneoTask[] {
-    return Array.from(this.tasks.values())
-      .filter((t) => t.projectId === projectId)
-      .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1));
-  }
-}
-
-export const kaneoServer = new KaneoMCPServer();
+  async linkWorkflow(taskId: string, workflowId: string, args: Record<string, unknown>) {
+    const workspaceId = args.workspaceId as string;
+    return projectService.linkWorkflow(workspaceId, taskId, workflowId);
+  },
+};
 
 export const kaneoTools = [
   {
@@ -281,6 +80,7 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         name: { type: 'string', description: 'Project name' },
         description: { type: 'string', description: 'Project description' },
         owner: { type: 'string', description: 'Project owner (user ID)' },
@@ -288,7 +88,7 @@ export const kaneoTools = [
         tags: { type: 'array', items: { type: 'string' }, description: 'Project tags' },
         dueDate: { type: 'string', description: 'ISO date string for project due date' },
       },
-      required: ['name', 'owner'],
+      required: ['workspaceId', 'name', 'owner'],
     },
   },
   {
@@ -297,9 +97,10 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Project ID' },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -308,12 +109,14 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         owner: { type: 'string', description: 'Filter by owner' },
         status: { type: 'string', enum: ['active', 'archived', 'planning'], description: 'Filter by status' },
         search: { type: 'string', description: 'Search by name or description' },
         limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
         offset: { type: 'integer', minimum: 0, default: 0 },
       },
+      required: ['workspaceId'],
     },
   },
   {
@@ -322,6 +125,7 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Project ID' },
         name: { type: 'string', description: 'New project name' },
         description: { type: 'string', description: 'New description' },
@@ -329,7 +133,7 @@ export const kaneoTools = [
         tags: { type: 'array', items: { type: 'string' } },
         team: { type: 'array', items: { type: 'string' } },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -338,9 +142,10 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Project ID' },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -349,6 +154,7 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         projectId: { type: 'string', description: 'Project ID' },
         title: { type: 'string', description: 'Task title' },
         description: { type: 'string', description: 'Task description' },
@@ -356,9 +162,9 @@ export const kaneoTools = [
         dueDate: { type: 'string', description: 'Due date as ISO string' },
         priority: { type: 'string', enum: ['low', 'medium', 'high', 'critical'], default: 'medium' },
         tags: { type: 'array', items: { type: 'string' } },
-        workflowId: { type: 'string', description: 'Optional Prefect workflow ID to link' },
+        workflowId: { type: 'string', description: 'Prefect workflow ID to link' },
       },
-      required: ['projectId', 'title', 'assignee', 'dueDate'],
+      required: ['workspaceId', 'projectId', 'title', 'assignee', 'dueDate'],
     },
   },
   {
@@ -367,9 +173,10 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Task ID' },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -378,6 +185,7 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         projectId: { type: 'string', description: 'Filter by project ID' },
         status: { type: 'string', enum: ['todo', 'in-progress', 'review', 'done', 'cancelled'] },
         assignee: { type: 'string', description: 'Filter by assignee' },
@@ -386,6 +194,7 @@ export const kaneoTools = [
         limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
         offset: { type: 'integer', minimum: 0, default: 0 },
       },
+      required: ['workspaceId'],
     },
   },
   {
@@ -394,6 +203,7 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Task ID' },
         title: { type: 'string', description: 'Task title' },
         description: { type: 'string', description: 'Task description' },
@@ -404,7 +214,7 @@ export const kaneoTools = [
         tags: { type: 'array', items: { type: 'string' } },
         workflowId: { type: 'string', description: 'Prefect workflow ID' },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -413,9 +223,10 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         id: { type: 'string', description: 'Task ID' },
       },
-      required: ['id'],
+      required: ['workspaceId', 'id'],
     },
   },
   {
@@ -424,10 +235,11 @@ export const kaneoTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        workspaceId: { type: 'string', description: 'Kaneo workspace ID' },
         taskId: { type: 'string', description: 'Task ID' },
         workflowId: { type: 'string', description: 'Prefect workflow/flow ID' },
       },
-      required: ['taskId', 'workflowId'],
+      required: ['workspaceId', 'taskId', 'workflowId'],
     },
   },
 ];

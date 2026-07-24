@@ -9,6 +9,7 @@ services:
     depends_on:
       - mongodb
       - rag_api
+      - kaneo
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,6 +23,9 @@ services:
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
+      - PREFECT_API_URL=http://prefect:4200/api
+      - PREFECT_API_KEY=${PREFECT_API_KEY:-}
+      - KANEO_API_URL=http://kaneo:5173
       - PROXY=${PROXY:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
@@ -141,11 +145,42 @@ services:
       - rag_api
       - prefect
       - vectordb
+      - kaneo
     restart: always
     env_file:
       - .env
+
+  kaneo-postgres:
+    container_name: lemefy-kaneo-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: kaneo
+      POSTGRES_USER: kaneo
+      POSTGRES_PASSWORD: ${KANEO_DB_PASSWORD:-kaneo_password}
+    volumes:
+      - kaneo_pgdata:/var/lib/postgresql/data
+    restart: always
+
+  kaneo:
+    container_name: lemefy-kaneo
+    image: ghcr.io/usekaneo/kaneo:latest
+    ports:
+      - "${KANEO_PORT:-5173}:5173"
+    env_file:
+      - .env
+    depends_on:
+      kaneo-postgres:
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:5173/api/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
 
 volumes:
   pgdata2:
   prefect_data:
   prefect_pgdata:
+  kaneo_pgdata:
