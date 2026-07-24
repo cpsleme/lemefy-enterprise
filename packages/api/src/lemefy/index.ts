@@ -8,7 +8,10 @@ import type { LemefyProject, LemefyTask } from './types';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { z } from 'zod';
 
-const prefectHandler = createPrefectMCPHandler({
+const prefectHandler: {
+  tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+} = createPrefectMCPHandler({
   apiBaseUrl: process.env.PREFECT_API_URL ?? 'http://localhost:4200',
   apiKey: process.env.PREFECT_API_KEY,
 });
@@ -19,7 +22,10 @@ const lemefyMcpTools = [
   ...ragTools,
 ];
 
-export const lemefyMcpHandler = {
+export const lemefyMcpHandler: {
+  tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+} = {
   tools: lemefyMcpTools,
 
   async callTool(name: string, args: Record<string, unknown>) {
@@ -55,7 +61,7 @@ export const lemefyMcpHandler = {
 
       default:
         return {
-          content: [{ type: 'text', text: `Unknown LemeFY tool: ${name}` }],
+          content: [{ type: 'text', text: `Unknown Lemefy tool: ${name}` }],
           isError: true,
         };
     }
@@ -167,7 +173,31 @@ function handleRagTool(
   }
 }
 
-export const lemefyService = {
+export const lemefyService: {
+  prefect: {
+    handler: {
+      tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+      callTool(name: string, args: Record<string, unknown>): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    };
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  };
+  kaneo: {
+    server: { createProject: (input: unknown) => unknown; getProject: (id: string) => unknown; listProjects: (input: unknown) => unknown; updateProject: (id: string, input: unknown) => unknown; deleteProject: (id: string) => unknown; createTask: (input: unknown) => unknown; getTask: (id: string) => unknown; listTasks: (input: unknown) => unknown; updateTask: (id: string, input: unknown) => unknown; deleteTask: (id: string) => unknown; linkWorkflow: (taskId: string, workflowId: string) => unknown; };
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+  };
+  rag: {
+    tools: Array<{ name: string; description?: string; inputSchema?: unknown }>;
+    searchKnowledge: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    addKnowledgeDocument: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    getDocumentById: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    listDocuments: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+    deleteDocument: (args: Record<string, unknown>) => Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }>;
+  };
+  finops: { ingestCostData: (data: unknown[]) => void; getCostReport: (params: unknown) => { totalCost: number; breakdown: Array<{ service: string; cost: number }>; recommendations: Array<{ id: string; title: string }>; periodStart: string; periodEnd: string }; getRecommendations: (projectId: string) => Array<{ id: string; title: string; estimatedSavings: number }>; getCostByService: (params: unknown) => Array<{ service: string; cost: number }>; };
+  governance: { getPolicies: (standard?: string) => Array<{ id: string; name: string; standard: string; controls: Array<{ id: string; name: string; status: string }> }>; getPolicy: (id: string) => { id: string; name: string; controls: Array<{ id: string; name: string; status: string }> } | undefined; updateControl: (policyId: string, controlId: string, updates: Record<string, unknown>) => { id: string; name: string; status: string } | undefined; checkCompliance: (policyId: string) => { score: number; status: string; controls: Array<{ id: string; name: string; status: string }> }; assessAllPolicies: () => Array<{ id: string; name: string; score: number; status: string }>; };
+  dora: { getMetrics: (params: unknown) => Array<{ name: string; value: number; unit: string; trend: string }>; recordDeployEvent: (event: unknown) => void; };
+  space: { getMetrics: (team: string, period: string) => Array<{ name: string; value: number; unit: string; trend: string }>; recordSurvey: (survey: unknown) => void; };
+} = {
   prefect: {
     handler: prefectHandler,
     tools: prefectHandler.tools,

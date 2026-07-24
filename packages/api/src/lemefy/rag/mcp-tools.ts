@@ -2,7 +2,7 @@ export { searchKnowledge, addKnowledgeDocument, getDocumentById, listDocuments, 
 export const ragTools = [
   {
     name: 'search_knowledge',
-    description: 'Search the LemeFY knowledge base for FINOS, FinOps, and cloud governance documentation',
+    description: 'Search the Lemefy knowledge base for FINOS, FinOps, and cloud governance documentation',
     inputSchema: {
       type: 'object',
       properties: {

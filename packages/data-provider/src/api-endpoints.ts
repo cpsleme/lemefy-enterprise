@@ -530,7 +530,7 @@ export const getAllEffectivePermissions = (resourceType: ResourceType) =>
 export const graphToken = (scopes: string) =>
   `${BASE_URL}/api/auth/graph-token?scopes=${encodeURIComponent(scopes)}`;
 
-/* Lemefy (LemeFY) Governance Platform */
+/* Lemefy Governance Platform */
 export const lemefyRoot = `${BASE_URL}/api/lemefy`;
 
 export const finopsReport = (params: { projectId: string; periodStart: string; periodEnd: string }) =>

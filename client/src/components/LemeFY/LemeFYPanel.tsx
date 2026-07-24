@@ -17,16 +17,16 @@ const LEMEFY_TABS = [
   { id: 'metrics', label: 'Metrics', icon: 'chart' },
 ] as const;
 
-type LemeFYTab = (typeof LEMEFY_TABS)[number]['id'];
+type LemefyTab = (typeof LEMEFY_TABS)[number]['id'];
 
-interface LemeFYPanelProps {
+interface LemefyPanelProps {
   className?: string;
-  defaultTab?: LemeFYTab;
+  defaultTab?: LemefyTab;
 }
 
-export default function LemeFYPanel({ className, defaultTab = 'finops' }: LemeFYPanelProps) {
+export default function LemefyPanel({ className, defaultTab = 'finops' }: LemefyPanelProps) {
   const localize = useLocalize();
-  const [activeTab, setActiveTab] = useState<LemeFYTab>(defaultTab);
+  const [activeTab, setActiveTab] = useState<LemefyTab>(defaultTab);
 
   return (
     <div className={cn('lemefy-panel', className)}>

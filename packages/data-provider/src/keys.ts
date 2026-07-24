@@ -129,7 +129,7 @@ export enum MutationKeys {
   deleteSkillNode = 'deleteSkillNode',
   updateSkillNodeContent = 'updateSkillNodeContent',
   convoPin = 'convoPin',
-  /* Lemefy (LemeFY) governance platform */
+  /* Lemefy governance platform */
   lemefy = 'lemefy',
   lemefyFinOps = 'lemefyFinOps',
   lemefyGovernance = 'lemefyGovernance',

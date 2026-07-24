@@ -21,7 +21,7 @@ import ShareRoute from './ShareRoute';
 import ChatRoute from './ChatRoute';
 import Search from './Search';
 import Root from './Root';
-import LemeFYPanel from '~/components/LemeFY/LemeFYPanel';
+import LemefyPanel from '~/components/LemeFY/LemefyPanel';
 
 const AuthLayout = () => (
   <AuthContextProvider>
@@ -189,7 +189,7 @@ export const router = createBrowserRouter(
             },
             {
               path: 'lemefy',
-              element: <LemeFYPanel />,
+              element: <LemefyPanel />,
             },
           ],
         },
