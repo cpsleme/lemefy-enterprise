@@ -1,7 +1,11 @@
 const { Router } = require('express');
 const { logger } = require('@lemefy/data-schemas');
+const { lemefyService } = require('@lemefy/api');
+const { ensureKaneoWorkspace } = require('@lemefy/api/lemefy/projects/middleware/ensure-kaneo-workspace');
 
 const router = Router();
+
+router.use(ensureKaneoWorkspace);
 
 router.post('/projects', async (req, res) => {
   try {
