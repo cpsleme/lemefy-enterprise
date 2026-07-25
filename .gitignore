@@ -57,6 +57,7 @@ api/node_modules/
 client/node_modules/
 bower_components/
 *.d.ts
+!packages/api/src/types/*.d.ts
 !vite-env.d.ts
 
 # AI
