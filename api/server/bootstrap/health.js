@@ -1,11 +1,15 @@
 module.exports = function registerHealthRoutes(app) {
   app.get('/health', (_req, res) => res.status(200).send('OK'));
   app.get('/livez', (_req, res) => res.status(200).send('OK'));
+
   app.get('/readyz', (_req, res) => {
-    if (!app.locals?.serverReady) {
-      return res.status(503).send('NOT_READY');
-    }
-    return res.status(200).send('OK');
+    const ready = app.locals?.serverReady === true;
+    return res.status(ready ? 200 : 503).send(ready ? 'OK' : 'NOT_READY');
+  });
+
+  app.get('/healthz', (_req, res) => {
+    const ready = app.locals?.serverReady === true;
+    return res.status(ready ? 200 : 503).send(ready ? 'OK' : 'NOT_READY');
   });
 
   app.get('/health/mongo', async (_req, res) => {
