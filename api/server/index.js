@@ -1,14 +1,16 @@
 const telemetry = require('./telemetry');
 const fs = require('fs');
 const path = require('path');
-require('module-alias')({ base: path.resolve(__dirname, '..') });
 const cors = require('cors');
-const axios = require('axios');
-const express = require('express');
-const passport = require('passport');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const mongoSanitize = require('express-mongo-sanitize');
+const passport = require('passport');
+const { parse: parseEnv } = require('./config/env.validate');
+require('module-alias')({ base: path.resolve(__dirname, '..') });
+parseEnv();
+const axios = require('axios');
+const express = require('express');
 const { logger, runAsSystem, tenantStorage } = require('@lemefy/data-schemas');
 const {
   isEnabled,
@@ -19,17 +21,17 @@ const {
   performStartupChecks,
   handleJsonParseError,
   GenerationJobManager,
-  QUERY_DEVTOOLS_HEADER,
   createStreamServices,
   deleteAgentCheckpoint,
   initializeFileStorage,
   initializeDeploymentSkills,
   loadToolApprovalHooks,
+  QUERY_DEVTOOLS_HEADER,
   maybeInjectQueryDevtoolsBootstrap,
   preAuthTenantMiddleware,
   setupGracefulShutdown,
   updateInterfacePermissions,
-} = require('@lemefy/api');
+} = require('~/adapters/app');
 const { connectDb, indexSync } = require('~/db');
 const {
   updateAccessPermissions,
@@ -52,8 +54,9 @@ const { getAppConfig } = require('./services/Config');
 const staticCache = require('./utils/staticCache');
 const noIndex = require('./middleware/noIndex');
 const routes = require('./routes');
-
-const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
+const registerHealthRoutes = require('./bootstrap/health');
+const registerMiddleware = require('./bootstrap/middleware');
+const registerRoutes = require('./bootstrap/routes');
 
 // Allow PORT=0 to be used for automatic free port assignment
 const port = isNaN(Number(PORT)) ? 3080 : Number(PORT);
@@ -62,6 +65,8 @@ const trusted_proxy = Number(TRUST_PROXY) || 1; /* trust first proxy by default 
 
 const app = express();
 let serverReady = false;
+
+const { PORT, HOST, ALLOW_SOCIAL_LOGIN, DISABLE_COMPRESSION, TRUST_PROXY } = process.env ?? {};
 
 const SERVER_NOT_READY_CODE = 'SERVER_NOT_READY';
 const CHAT_START_RETRY_AFTER_SECONDS = '1';
@@ -187,133 +192,55 @@ const startServer = async () => {
     res.send(updatedIndexHtml);
   };
 
-  app.get('/health', (_req, res) => res.status(200).send('OK'));
-  app.get('/livez', (_req, res) => res.status(200).send('OK'));
-  app.get('/readyz', (_req, res) => {
-    if (!serverReady) {
-      return res.status(503).send('NOT_READY');
-    }
-    return res.status(200).send('OK');
+  registerHealthRoutes(app);
+
+  await registerMiddleware(app, {
+    metricsMiddleware,
+    noIndex,
+    express,
+    handleJsonParseError,
+    mongoSanitize,
+    cors,
+    cookieParser,
+    compression,
+    isEnabled,
+    DISABLE_COMPRESSION,
+    staticCache,
+    telemetry,
+    passport,
+    jwtLogin,
+    passportLogin,
+    ldapLogin,
+    ALLOW_SOCIAL_LOGIN,
+    configureSocialLogins,
+    capabilityContextMiddleware,
+    preAuthTenantMiddleware,
+    optionalJwtAuth,
+    createValidateImageRequest,
+    QUERY_DEVTOOLS_HEADER,
+    maybeInjectQueryDevtoolsBootstrap,
+    indexHTML,
+    appConfig,
   });
 
-  /* Middleware */
-  app.use(metricsMiddleware);
-  app.use(noIndex);
-  app.use(express.json({ limit: '3mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '3mb' }));
-  app.use(handleJsonParseError);
-
-  /**
-   * Express 5 Compatibility: Make req.query writable for mongoSanitize
-   * In Express 5, req.query is read-only by default, but express-mongo-sanitize needs to modify it
-   */
-  app.use((req, _res, next) => {
-    Object.defineProperty(req, 'query', {
-      ...Object.getOwnPropertyDescriptor(req, 'query'),
-      value: req.query,
-      writable: true,
-    });
-    next();
+  await registerRoutes(app, routes, {
+    preAuthTenantMiddleware,
+    optionalJwtAuth,
+    createValidateImageRequest,
+    rejectChatStartsUntilReady,
+    appConfig,
   });
-
-  app.use(mongoSanitize());
-  app.use(cors());
-  app.use(cookieParser());
-
-  if (!isEnabled(DISABLE_COMPRESSION)) {
-    app.use(compression());
-  } else {
-    console.warn('Response compression has been disabled via DISABLE_COMPRESSION.');
-  }
-
-  app.get('/index.html', sendIndexHtml);
-  app.use(staticCache(appConfig.paths.dist));
-  app.use(staticCache(appConfig.paths.fonts));
-  app.use(staticCache(appConfig.paths.assets));
-
-  if (telemetry.enabled) {
-    app.use(telemetry.telemetryMiddleware);
-  }
-
-  if (!ALLOW_SOCIAL_LOGIN) {
-    console.warn('Social logins are disabled. Set ALLOW_SOCIAL_LOGIN=true to enable them.');
-  }
-
-  /* OAUTH */
-  app.use(passport.initialize());
-  passport.use(jwtLogin());
-  passport.use(passportLogin());
-
-  /* LDAP Auth */
-  if (process.env.LDAP_URL && process.env.LDAP_USER_SEARCH_BASE) {
-    passport.use(ldapLogin);
-  }
-
-  if (isEnabled(ALLOW_SOCIAL_LOGIN)) {
-    await configureSocialLogins(app);
-  }
-
-  /* Per-request capability cache — must be registered before any route that calls hasCapability */
-  app.use(capabilityContextMiddleware);
-
-  /* Pre-auth tenant context for unauthenticated routes that need tenant scoping.
-   * The reverse proxy / auth gateway sets `X-Tenant-Id` header for multi-tenant deployments. */
-  app.use('/oauth', preAuthTenantMiddleware, routes.oauth);
-  /* API Endpoints */
-  app.use('/api/auth', preAuthTenantMiddleware, routes.auth);
-  app.use('/api/admin', routes.adminAuth);
-  app.use('/api/admin/config', routes.adminConfig);
-  app.use('/api/admin/grants', routes.adminGrants);
-  app.use('/api/admin/groups', routes.adminGroups);
-  app.use('/api/admin/roles', routes.adminRoles);
-  app.use('/api/admin/skills', routes.adminSkills);
-  app.use('/api/admin/users', routes.adminUsers);
-  app.use('/api/admin/audit-log', routes.adminAuditLog);
-  app.use('/api/actions', routes.actions);
-  app.use('/api/keys', routes.keys);
-  app.use('/api/api-keys', routes.apiKeys);
-  app.use('/api/user', routes.user);
-  app.use('/api/search', routes.search);
-  app.use('/api/messages', routes.messages);
-  app.use('/api/convos', routes.convos);
-  app.use('/api/presets', routes.presets);
-  app.use('/api/projects', routes.projects);
-  app.use('/api/prompts', routes.prompts);
-  app.use('/api/skills', routes.skills);
-  app.use('/api/categories', routes.categories);
-  app.use('/api/endpoints', routes.endpoints);
-  app.use('/api/balance', routes.balance);
-  app.use('/api/models', routes.models);
-  app.use('/api/config', preAuthTenantMiddleware, optionalJwtAuth, routes.config);
-  app.use('/api/assistants', routes.assistants);
-  app.use('/api/files', await routes.files.initialize());
-  app.use('/images/', createValidateImageRequest(appConfig.secureImageLinks), routes.staticRoute);
-  app.use('/api/share', preAuthTenantMiddleware, routes.share);
-  app.use('/api/roles', routes.roles);
-  app.use('/api/agents/chat', rejectChatStartsUntilReady);
-  app.use('/api/agents', routes.agents);
-  app.use('/api/banner', routes.banner);
-  app.use('/api/memories', routes.memories);
-  app.use('/api/permissions', routes.accessPermissions);
-
-  app.use('/api/tags', routes.tags);
-  app.use('/api/mcp', routes.mcp);
-  app.use('/api/rum', routes.rum);
-  app.use('/api/lemefy', routes.lemefy);
 
   app.use('/metrics', metricsRouter);
 
-  /** 404 for unmatched API routes */
   app.use('/api', apiNotFound);
 
-  /** SPA fallback - serve index.html for all unmatched routes */
   app.use(createSpaFallback(sendIndexHtml));
 
-  /** Record trace errors before the final error controller. */
   if (telemetry.enabled) {
     app.use(telemetry.telemetryErrorMiddleware);
   }
-  /** Error handler (must be last - Express identifies error middleware by its 4-arg signature) */
+
   app.use(ErrorController);
 
   configureGenerationStreams();

@@ -1,5 +1,7 @@
 import { defineWorkflow } from '@temporalio/workflow';
-import { fetchRepoDocuments, upsertDocuments, recordSyncStatus } from './fetch-documents.activity';
+import { fetchRepoDocuments } from '../activities/fetch-documents.activity';
+import { upsertDocuments } from '../activities/upsert-documents.activity';
+import { recordSyncStatus } from '../activities/record-sync-status.activity';
 
 export interface RepoMeta {
   id: string;
