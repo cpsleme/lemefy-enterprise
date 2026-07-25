@@ -279,6 +279,7 @@ const startServer = async () => {
         memoryDiagnostics.start();
       }
       serverReady = true;
+      app.locals.serverReady = serverReady;
       logger.info('Server readiness checks passing.');
     } catch (initErr) {
       serverReady = false;
