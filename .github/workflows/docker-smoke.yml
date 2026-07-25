@@ -80,22 +80,24 @@ jobs:
           docker run --rm lemefy-api-smoke:ci \
             node -e "require('@lemefy/api'); require('@lemefy/api/telemetry'); console.log('module resolution OK')"
 
-      # Boot the real entrypoint against a real MongoDB so the *entire* server
-      # require graph loads (api/db throws at module scope without MONGO_URI, and
-      # is imported before models/services/routes), then gate on /readyz AND the
+      # Boot the real entrypoint against PostgreSQL so the *entire* server
+      # require graph loads (api/db now supports optional MongoDB), then gate on /readyz AND the
       # container staying alive. /readyz only returns 200 after the post-listen
       # startup (initializeMCPs + checkMigrations) sets serverReady, and those
       # steps process.exit(1) on failure — so ANY startup crash (missing module,
       # ReferenceError, bad config, post-listen failure) fails the smoke.
-      - name: Boot production image against MongoDB and poll /readyz
+      - name: Boot production image against PostgreSQL and poll /readyz
         run: |
           set -u
           docker network create lc-smoke
-          docker run -d --name lc-mongo --network lc-smoke mongo:8.0.20
+          docker run -d --name lc-postgres --network lc-smoke -e POSTGRES_DB=lemefy -e POSTGRES_USER=lemefy -e POSTGRES_PASSWORD=lemefy_password postgres:15-alpine
           docker run -d --name lc-api --network lc-smoke -p 3080:3080 \
             -e HOST=0.0.0.0 -e PORT=3080 \
             -e NODE_ENV=production \
-            -e MONGO_URI=mongodb://lc-mongo:27017/Lemefy \
+            -e POSTGRES_HOST=lc-postgres \
+            -e POSTGRES_DB=lemefy \
+            -e POSTGRES_USER=lemefy \
+            -e POSTGRES_PASSWORD=lemefy_password \
             -e CREDS_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
             -e CREDS_IV=0123456789abcdef0123456789abcdef \
             -e JWT_SECRET=docker-smoke-jwt-secret \
@@ -120,7 +122,7 @@ jobs:
           echo "----- last 100 lines of api container logs -----"
           docker logs lc-api 2>&1 | tail -100 || true
           echo "------------------------------------------------"
-          docker rm -f lc-api lc-mongo >/dev/null 2>&1 || true
+          docker rm -f lc-api lc-postgres >/dev/null 2>&1 || true
           docker network rm lc-smoke >/dev/null 2>&1 || true
 
           if [ -z "$healthy" ]; then

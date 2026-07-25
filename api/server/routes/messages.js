@@ -18,6 +18,7 @@ const {
   prepareMessageRequestValidation,
 } = require('~/server/middleware');
 const db = require('~/models');
+const pgChat = require('@lemefy/data-schemas');
 
 const router = express.Router();
 router.use(requireJwtAuth);
@@ -40,58 +41,48 @@ router.get('/', async (req, res) => {
     const sortField = ['endpoint', 'createdAt', 'updatedAt'].includes(sortBy)
       ? sortBy
       : 'createdAt';
-    const sortOrder = sortDirection === 'asc' ? 1 : -1;
+    const sortOrder = sortDirection === 'asc' ? 'asc' : 'desc';
 
     if (conversationId && messageId) {
-      const messages = await db.getMessages({ conversationId, messageId, user });
+      const messages = await pgChat.message.getMessages({ conversationId, messageId, user });
       response = { messages: messages?.length ? [messages[0]] : [], nextCursor: null };
     } else if (conversationId) {
-      response = await db.getMessagesByCursor(
-        { conversationId, user },
-        { sortField, sortOrder, limit: pageSize, cursor },
-      );
-    } else if (search) {
-      const searchResults = await db.searchMessages(search, { filter: `user = "${user}"` }, true);
-
-      const messages = searchResults.hits || [];
-
-      const result = await db.getConvosQueried(req.user.id, messages, cursor);
-
-      const messageIds = [];
-      const cleanedMessages = [];
-      for (let i = 0; i < messages.length; i++) {
-        let message = messages[i];
-        if (result.convoMap[message.conversationId]) {
-          messageIds.push(message.messageId);
-          cleanedMessages.push(message);
-        }
-      }
-
-      const dbMessages = await db.getMessages({
+      const messages = await pgChat.message.getMessagesByCursor({
+        conversationId,
         user,
-        messageId: { $in: messageIds },
+        limit: pageSize,
+        cursor,
+        sortField,
+        sortOrder,
       });
+      response = { messages, nextCursor: null };
+    } else if (search) {
+      const tenantId = req.user?.tenantId || 'default';
+      const searchResults = await pgChat.message.searchMessages(search, user, tenantId, pageSize);
 
-      const dbMessageMap = {};
-      for (const dbMessage of dbMessages) {
-        dbMessageMap[dbMessage.messageId] = dbMessage;
-      }
+      const messageIds = searchResults.map((m) => m.messageId);
+      const dbMessages = messageIds.length
+        ? await pgChat.message.getMessages({
+            conversationId: searchResults[0]?.conversationId,
+            userId: user,
+            tenantId,
+            limit: messageIds.length,
+            cursor: messageIds[0],
+          })
+        : [];
 
-      const activeMessages = [];
-      for (const message of cleanedMessages) {
-        const convo = result.convoMap[message.conversationId];
-        const dbMessage = dbMessageMap[message.messageId];
+      const dbMessageMap = new Map(dbMessages.map((m) => [m.messageId, m]));
 
-        activeMessages.push({
-          ...message,
-          title: convo.title,
-          conversationId: message.conversationId,
-          model: convo.model,
+      const activeMessages = searchResults.map((hit) => {
+        const dbMessage = dbMessageMap.get(hit.messageId);
+        return {
+          ...hit,
+          text: dbMessage?.text ?? hit.text,
+          content: dbMessage?.content ?? hit.content,
           isCreatedByUser: dbMessage?.isCreatedByUser,
           endpoint: dbMessage?.endpoint,
-          iconURL: dbMessage?.iconURL,
-        });
-      }
+        };
+      });
 
       response = { messages: activeMessages, nextCursor: null };
     } else {
@@ -175,15 +166,7 @@ router.post('/branch', async (req, res) => {
       user: userId,
     };
 
-    const savedMessage = await db.saveMessage(
-      {
-        userId: req?.user?.id,
-        isTemporary: req?.body?.isTemporary,
-        interfaceConfig: req?.config?.interfaceConfig,
-      },
-      newMessage,
-      { context: 'POST /api/messages/branch' },
-    );
+    const savedMessage = await pgChat.message.saveMessage(newMessage);
 
     if (!savedMessage) {
       return res.status(500).json({ error: 'Failed to save branch message' });
@@ -250,21 +233,12 @@ router.post('/artifact/:messageId', async (req, res) => {
       return res.status(400).json({ error: 'Original content not found in target artifact' });
     }
 
-    const savedMessage = await db.saveMessage(
-      {
-        userId: req?.user?.id,
-        isTemporary: req?.body?.isTemporary,
-        interfaceConfig: req?.config?.interfaceConfig,
-      },
-      {
-        messageId,
-        conversationId: message.conversationId,
-        text: message.text,
-        content: message.content,
-        user: req.user.id,
-      },
-      { context: 'POST /api/messages/artifact/:messageId' },
-    );
+    const savedMessage = await pgChat.message.saveMessage({
+          conversationId: message.conversationId,
+          text: message.text,
+          content: message.content,
+          userId: req.user.id,
+        });
 
     res.status(200).json({
       conversationId: savedMessage.conversationId,
@@ -316,15 +290,21 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
       isTemporary: req?.body?.isTemporary,
       interfaceConfig: req?.config?.interfaceConfig,
     };
-    const savedMessage = await db.saveMessage(
-      reqCtx,
-      { ...message, user: req.user.id },
-      { context: 'POST /api/messages/:conversationId' },
-    );
+    const savedMessage = USE_POSTGRES_CHAT
+      ? await pgChat.message.saveMessage({ ...message, user: req.user.id })
+      : await db.saveMessage(
+          reqCtx,
+          { ...message, user: req.user.id },
+          { context: 'POST /api/messages/:conversationId' },
+        );
     if (!savedMessage) {
       return res.status(400).json({ error: 'Message not saved' });
     }
-    await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
+    if (USE_POSTGRES_CHAT) {
+      await pgChat.conversation.upsertConvo({ conversationId: message.conversationId, userId: req.user.id });
+    } else {
+      await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
+    }
     res.status(201).json(savedMessage);
   } catch (error) {
     logger.error('Error saving message:', error);
@@ -335,14 +315,11 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
 router.get('/:conversationId/:messageId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
-    const message = await db.getMessages(
-      { conversationId, messageId, user: req.user.id },
-      '-_id -__v -user',
-    );
-    if (!message) {
+    const messages = await pgChat.message.getMessages({ conversationId, messageId, user: req.user.id });
+    if (!messages || !messages.length) {
       return res.status(404).json({ error: 'Message not found' });
     }
-    res.status(200).json(message);
+    res.status(200).json(messages[0]);
   } catch (error) {
     logger.error('Error fetching message:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -355,23 +332,15 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
     const { text, index, model } = req.body;
 
     if (index === undefined) {
-      /** A user turn's persisted `quotes` are re-prepended into the prompt on
-       *  every send, but this edit only changes `text`. Count the merged
-       *  text+quotes so the stored `tokenCount` stays authoritative (matching the
-       *  send path); a plain text-only count under-reports by the quote block. */
-      const existing = (
-        await db.getMessages(
-          { conversationId, messageId, user: req.user.id },
-          'quotes isCreatedByUser',
-        )
-      )?.[0];
+      const existingMessages = await pgChat.message.getMessages({ conversationId, messageId, user: req.user.id });
+      const existing = existingMessages?.[0];
       const textToCount = mergeQuotedTextForCount(
         text,
         existing?.quotes,
         existing?.isCreatedByUser === true,
       );
       const tokenCount = await countTokens(textToCount, model);
-      const result = await db.updateMessage(req?.user?.id, { messageId, text, tokenCount });
+      const result = await pgChat.message.updateMessage(messageId, req.user.id, { text, tokenCount });
       return res.status(200).json(result);
     }
 
@@ -379,9 +348,8 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
       return res.status(400).json({ error: 'Invalid index' });
     }
 
-    const message = (
-      await db.getMessages({ conversationId, messageId, user: req.user.id }, 'content tokenCount')
-    )?.[0];
+    const targetMessages = await pgChat.message.getMessages({ conversationId, messageId, user: req.user.id });
+    const message = targetMessages?.[0];
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
@@ -411,11 +379,7 @@ router.put('/:conversationId/:messageId', validateMessageReq, async (req, res) =
       tokenCount = Math.max(0, tokenCount - oldTokenCount) + newTokenCount;
     }
 
-    const result = await db.updateMessage(req?.user?.id, {
-      messageId,
-      content: updatedContent,
-      tokenCount,
-    });
+    const result = await pgChat.message.updateMessage(messageId, req.user.id, { content: updatedContent, tokenCount });
     return res.status(200).json(result);
   } catch (error) {
     logger.error('Error updating message:', error);
@@ -432,14 +396,7 @@ router.put(
       const { conversationId, messageId } = req.params;
       const { feedback } = req.body;
 
-      const updatedMessage = await db.updateMessage(
-        req?.user?.id,
-        {
-          messageId,
-          feedback: feedback || null,
-        },
-        { context: 'updateFeedback' },
-      );
+      const updatedMessage = await pgChat.message.updateMessage(messageId, req?.user?.id, { feedback: feedback || null });
 
       // Best-effort: Assistants messages do not have deterministic AgentRun traces.
       if (!isAssistantsEndpoint(updatedMessage.endpoint)) {
@@ -477,7 +434,7 @@ router.put(
 router.delete('/:conversationId/:messageId', validateMessageReq, async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
-    await db.deleteMessages({ messageId, conversationId, user: req.user.id });
+    await pgChat.message.deleteMessages([messageId], req.user.id);
     res.status(204).send();
   } catch (error) {
     logger.error('Error deleting message:', error);

@@ -5,10 +5,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
     # restart: always
     links:
-      - mongodb
       - meilisearch
-    # ports:
-    #   - 3080:3080               # Change it to 9000:3080 to use nginx
     extra_hosts: # if you are running APIs on docker you need access to, you will need to uncomment this line and next
     - "host.docker.internal:host-gateway"
 
@@ -19,7 +16,10 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock 
     environment:
       - HOST=0.0.0.0
-      - MONGO_URI=mongodb://mongodb:27017/Lemefy
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=lemefy
+      - POSTGRES_USER=lemefy
+      - POSTGRES_PASSWORD=lemefy_password
       # - OPENAI_REVERSE_PROXY=http://host.docker.internal:8070/v1
       - MEILI_HOST=http://meilisearch:7700
 
@@ -35,17 +35,18 @@ services:
     # Overrides default command so things don't shut down after the process ends.
     command: /bin/sh -c "while sleep 1000; do :; done"  
 
-  mongodb:
-    container_name: lemefy-mongodb
+  postgres:
+    container_name: lemefy-postgres
     expose:
-      - 27017
-    # ports:
-    #   - 27018:27017
-    image: mongo
-    # restart: always
+      - 5432
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: lemefy
+      POSTGRES_USER: lemefy
+      POSTGRES_PASSWORD: lemefy_password
     volumes:
-      - ./data-node:/data/db
-    command: mongod --noauth
+      - ./postgres_data:/var/lib/postgresql/data
+      - ../config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
   meilisearch:
     container_name: lemefy-meilisearch
     image: getmeili/meilisearch:v1.5

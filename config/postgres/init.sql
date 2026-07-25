@@ -10,3 +10,7 @@ CREATE USER lemefy WITH PASSWORD '${LEMEFY_DB_PASSWORD:-lemefy_password}';
 GRANT ALL PRIVILEGES ON DATABASE rag_api TO myuser;
 GRANT ALL PRIVILEGES ON DATABASE kaneo TO kaneo;
 GRANT ALL PRIVILEGES ON DATABASE lemefy TO lemefy;
+
+-- Enable uuid-ossp for UUID generation if needed
+\c lemefy;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

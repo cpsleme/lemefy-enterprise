@@ -7,8 +7,6 @@ services:
     ports:
       - "${PORT}:${PORT}"
     depends_on:
-      mongodb:
-        condition: service_healthy
       meilisearch:
         condition: service_healthy
       rag_api:
@@ -26,7 +24,10 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - HOST=0.0.0.0
-      - MONGO_URI=mongodb://mongodb:27017/Lemefy
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=lemefy
+      - POSTGRES_USER=lemefy
+      - POSTGRES_PASSWORD=${LEMEFY_DB_PASSWORD:-lemefy_password}
       - MEILI_HOST=http://meilisearch:7700
       - RAG_PORT=${RAG_PORT:-8000}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
@@ -34,10 +35,10 @@ services:
       - PROXY=${PROXY:-}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
-      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
+      - NO_PROXY=${NO_PROXY:-localhost,127.0.0.1,::1},${no_proxy:-},meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
       - http_proxy=${http_proxy:-}
       - https_proxy=${https_proxy:-}
-      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},mongodb,lemefy-mongodb,meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
+      - no_proxy=${no_proxy:-localhost,127.0.0.1,::1},${NO_PROXY:-},meilisearch,lemefy-meilisearch,rag_api,host.docker.internal
     volumes:
       - type: bind
         source: ./.env
@@ -68,20 +69,6 @@ services:
       - API_SERVER_URL=http://api:${PORT:-3080}
       - VITE_API_BASE_URL=${DOMAIN_CLIENT:-http://localhost:3080}
       - SESSION_COOKIE_SECURE=${ADMIN_PANEL_SESSION_COOKIE_SECURE:-false}
-  mongodb:
-    container_name: lemefy-mongodb
-    image: mongo:8.0.20
-    restart: always
-    user: "${UID}:${GID}"
-    volumes:
-      - ./data-node:/data/db
-    command: mongod --noauth
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
   meilisearch:
     container_name: lemefy-meilisearch
     image: getmeili/meilisearch:v1.35.1
@@ -202,8 +189,6 @@ services:
       - KANEO_API_URL=${KANEO_API_URL:-}
       - RAG_API_URL=http://rag_api:${RAG_PORT:-8000}
     depends_on:
-      mongodb:
-        condition: service_healthy
       meilisearch:
         condition: service_healthy
       rag_api:

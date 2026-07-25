@@ -56,3 +56,25 @@ export {
 } from './config/tenantContext';
 export type { TenantContext } from './config/tenantContext';
 export { dropSupersededTenantIndexes, dropSupersededPromptGroupIndexes } from './migrations';
+
+export { chatDb } from './db/chat';
+export {
+  saveConvo,
+  getConvo,
+  getConvosByCursor,
+  deleteConvos,
+  saveMessage,
+  getMessages,
+  updateMessage,
+  deleteMessages,
+  createChatProject,
+  getChatProjects,
+  upsertConversationTag,
+  createToolCall,
+  getToolCallsByConvo,
+  saveCheckpoint,
+  getCheckpoint,
+  deleteChatCheckpoints,
+  upsertConvo,
+  deleteToolCalls,
+} from './db/chat/repositories';

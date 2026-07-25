@@ -8,8 +8,9 @@ const MONGO_URI = process.env.MONGO_URI;
 instrumentMongooseQueryMetrics(mongoose);
 
 if (!MONGO_URI) {
-  throw new Error('Please define the MONGO_URI environment variable');
+  logger.warn('[connectDb] MONGO_URI is not set. MongoDB features will be disabled.');
 }
+
 /** The maximum number of connections in the connection pool. */
 const maxPoolSize = parseInt(process.env.MONGO_MAX_POOL_SIZE) || undefined;
 /** The minimum number of connections in the connection pool. */
@@ -46,7 +47,39 @@ mongoose.connection.on('error', (err) => {
   logger.error('[connectDb] MongoDB connection error:', err);
 });
 
+function createMockConnection() {
+  const mockConnection = {
+    _readyState: 1,
+    db: {
+      collections: () => [],
+      collection: () => ({
+        findOne: async () => null,
+        find: async () => ({ toArray: async () => [] }),
+        insertOne: async () => ({}),
+        updateOne: async () => ({}),
+        deleteOne: async () => ({}),
+        createIndex: async () => ({}),
+        dropIndex: async () => ({}),
+      }),
+    },
+    models: {},
+    connection: {
+      on: () => {},
+    },
+    close: async () => {},
+  };
+  return mockConnection;
+}
+
 async function connectDb() {
+  if (!MONGO_URI) {
+    logger.warn('[connectDb] Skipping MongoDB connection - MONGO_URI not configured');
+    if (!cached.conn) {
+      cached.conn = createMockConnection();
+    }
+    return cached.conn;
+  }
+
   if (cached.conn && cached.conn?._readyState === 1) {
     return cached.conn;
   }
@@ -62,11 +95,6 @@ async function connectDb() {
       ...(waitQueueTimeoutMS ? { waitQueueTimeoutMS } : {}),
       ...(autoIndex != undefined ? { autoIndex } : {}),
       ...(autoCreate != undefined ? { autoCreate } : {}),
-      // useNewUrlParser: true,
-      // useUnifiedTopology: true,
-      // bufferMaxEntries: 0,
-      // useFindAndModify: true,
-      // useCreateIndex: true
     };
     logger.info('Mongo Connection options');
     logger.info(JSON.stringify(opts, null, 2));

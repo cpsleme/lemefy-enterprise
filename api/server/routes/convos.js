@@ -23,6 +23,7 @@ const requireJwtAuth = require('~/server/middleware/requireJwtAuth');
 const { importConversations } = require('~/server/utils/import');
 const getLogStores = require('~/cache/getLogStores');
 const db = require('~/models');
+const pgChat = require('@lemefy/data-schemas');
 
 const assistantClients = {
   [EModelEndpoint.azureAssistants]: require('~/server/services/Endpoints/azureAssistants'),
@@ -56,7 +57,7 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    const result = await db.getConvosByCursor(req.user.id, {
+    const result = await pgChat.conversation.getConvosByCursor(req.user.id, {
       cursor,
       limit,
       isArchived,
@@ -64,7 +65,7 @@ router.get('/', async (req, res) => {
       search,
       sortBy,
       sortDirection,
-      projectId,
+      chatProjectId: projectId,
     });
     res.status(200).json(result);
   } catch (error) {
@@ -75,12 +76,17 @@ router.get('/', async (req, res) => {
 
 router.get('/:conversationId', async (req, res) => {
   const { conversationId } = req.params;
-  const convo = await db.getConvo(req.user.id, conversationId);
+  try {
+    const convo = await pgChat.conversation.getConvo(conversationId, req.user.id);
 
-  if (convo) {
-    res.status(200).json(convo);
-  } else {
-    res.status(404).end();
+    if (convo) {
+      res.status(200).json(convo);
+    } else {
+      res.status(404).end();
+    }
+  } catch (error) {
+    logger.error('Error fetching conversation', error);
+    res.status(500).json({ error: 'Error fetching conversation' });
   }
 });
 
@@ -144,13 +150,13 @@ router.delete('/', configMiddleware, async (req, res) => {
   }
 
   try {
-    const dbResponse = await db.deleteConvos(req.user.id, filter);
-    // HITL: prune the deleted conversations' durable checkpoints — a paused run's
-    // checkpoint would otherwise persist until the Mongo TTL. Never throws.
-    await deleteAgentCheckpoints(
-      dbResponse.conversationIds,
-      req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
-    );
+    const dbResponse = await pgChat.conversation.deleteConvos(req.user.id, filter);
+    if (Array.isArray(dbResponse?.conversationIds)) {
+      await deleteAgentCheckpoints(
+        dbResponse.conversationIds,
+        req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
+      );
+    }
     if (filter.conversationId) {
       await db.deleteToolCalls(req.user.id, filter.conversationId);
       await deleteConvoSharedLinksWithCleanup(req.user.id, filter.conversationId);
@@ -164,12 +170,13 @@ router.delete('/', configMiddleware, async (req, res) => {
 
 router.delete('/all', configMiddleware, async (req, res) => {
   try {
-    const dbResponse = await db.deleteConvos(req.user.id, {});
-    // HITL: prune ALL the deleted conversations' durable checkpoints in one bulk pass.
-    await deleteAgentCheckpoints(
-      dbResponse.conversationIds,
-      req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
-    );
+    const dbResponse = await pgChat.conversation.deleteConvos(req.user.id, {});
+    if (Array.isArray(dbResponse?.conversationIds)) {
+      await deleteAgentCheckpoints(
+        dbResponse.conversationIds,
+        req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
+      );
+    }
     await db.deleteToolCalls(req.user.id);
     await deleteAllSharedLinksWithCleanup(req.user.id);
     res.status(201).json(dbResponse);
@@ -198,14 +205,14 @@ router.post('/archive', validateConvoAccess, async (req, res) => {
   }
 
   try {
-    const dbResponse = await db.saveConvo(
+    const dbResponse = await pgChat.conversation.upsertConvo(
       {
+        conversationId,
         userId: req?.user?.id,
         isTemporary: req?.body?.isTemporary,
-        interfaceConfig: req?.config?.interfaceConfig,
+        isArchived,
       },
-      { conversationId, isArchived },
-      { context: `POST /api/convos/archive ${conversationId}` },
+      { noUpsert: true },
     );
     res.status(200).json(dbResponse);
   } catch (error) {
@@ -230,10 +237,9 @@ router.post('/pin', validateConvoAccess, async (req, res) => {
   }
 
   try {
-    const dbResponse = await db.saveConvo(
-      { userId: req.user.id },
-      { conversationId, pinned },
-      { context: `POST /api/convos/pin ${conversationId}` },
+    const dbResponse = await pgChat.conversation.upsertConvo(
+      { conversationId, userId: req.user.id, pinned },
+      { noUpsert: true },
     );
     res.status(200).json(dbResponse);
   } catch (error) {
@@ -270,14 +276,14 @@ router.post('/update', validateConvoAccess, async (req, res) => {
   const sanitizedTitle = title.trim().slice(0, MAX_CONVO_TITLE_LENGTH);
 
   try {
-    const dbResponse = await db.saveConvo(
+    const dbResponse = await pgChat.conversation.upsertConvo(
       {
+        conversationId,
         userId: req?.user?.id,
         isTemporary: req?.body?.isTemporary,
-        interfaceConfig: req?.config?.interfaceConfig,
+        title: sanitizedTitle,
       },
-      { conversationId, title: sanitizedTitle },
-      { context: `POST /api/convos/update ${conversationId}` },
+      { noUpsert: true },
     );
     res.status(201).json(dbResponse);
   } catch (error) {
