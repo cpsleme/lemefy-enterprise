@@ -22,12 +22,12 @@ const { storage, importFileFilter } = require('~/server/routes/files/multer');
 const requireJwtAuth = require('~/server/middleware/requireJwtAuth');
 const { importConversations } = require('~/server/utils/import');
 const getLogStores = require('~/cache/getLogStores');
-const db = require('~/models');
 const {
   getConvo,
   getConvosByCursor,
   deleteConvos,
   upsertConvo,
+  deleteToolCalls,
 } = require('@lemefy/data-schemas');
 
 const assistantClients = {
@@ -161,7 +161,7 @@ router.delete('/', configMiddleware, async (req, res) => {
       );
     }
     if (filter.conversationId) {
-      await db.deleteToolCalls(req.user.id, filter.conversationId);
+      await deleteToolCalls(filter.conversationId, req.user.id, req.user.tenantId || 'default');
       await deleteConvoSharedLinksWithCleanup(req.user.id, filter.conversationId);
     }
     res.status(201).json(dbResponse);
@@ -180,7 +180,7 @@ router.delete('/all', configMiddleware, async (req, res) => {
         req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
       );
     }
-    await db.deleteToolCalls(req.user.id);
+    await deleteToolCalls(null, req.user.id, req.user.tenantId || 'default');
     await deleteAllSharedLinksWithCleanup(req.user.id);
     res.status(201).json(dbResponse);
   } catch (error) {

@@ -22,8 +22,8 @@ import { storage, importFileFilter } from '~/server/routes/files/multer';
 import { requireJwtAuth } from '~/server/middleware/requireJwtAuth';
 import { importConversations } from '~/server/utils/import';
 import getLogStores from '~/cache/getLogStores';
-import db from '~/models';
 import pgChat from '@lemefy/data-schemas';
+import { deleteToolCalls } from '@lemefy/data-schemas';
 
 const assistantClients: Record<string, any> = {
   [EModelEndpoint.azureAssistants]: require('~/server/services/Endpoints/azureAssistants'),
@@ -156,7 +156,7 @@ router.delete('/', configMiddleware, async (req: any, res: any) => {
       );
     }
     if (filter.conversationId) {
-      await db.deleteToolCalls(req.user.id, filter.conversationId);
+      await deleteToolCalls(filter.conversationId, req.user.id, req.user.tenantId || 'default');
       await deleteConvoSharedLinksWithCleanup(req.user.id, filter.conversationId);
     }
     res.status(201).json(dbResponse);
@@ -175,7 +175,7 @@ router.delete('/all', configMiddleware, async (req: any, res: any) => {
         req.config?.endpoints?.[EModelEndpoint.agents]?.checkpointer,
       );
     }
-    await db.deleteToolCalls(req.user.id);
+    await deleteToolCalls(null, req.user.id, req.user.tenantId || 'default');
     await deleteAllSharedLinksWithCleanup(req.user.id);
     res.status(201).json(dbResponse);
   } catch (error) {

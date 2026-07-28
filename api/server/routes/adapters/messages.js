@@ -17,7 +17,6 @@ const {
   sendValidationResponse,
   prepareMessageRequestValidation,
 } = require('~/server/middleware');
-const db = require('~/models');
 const {
   getMessages,
   getMessagesByCursor,
@@ -299,21 +298,11 @@ router.post('/:conversationId', validateMessageReq, async (req, res) => {
       isTemporary: req?.body?.isTemporary,
       interfaceConfig: req?.config?.interfaceConfig,
     };
-    const savedMessage = USE_POSTGRES_CHAT
-      ? await saveMessage({ ...message, userId: req.user.id, tenantId: req.user?.tenantId || 'default' })
-      : await db.saveMessage(
-          reqCtx,
-          { ...message, user: req.user.id },
-          { context: 'POST /api/messages/:conversationId' },
-        );
+    const savedMessage = await saveMessage({ ...message, userId: req.user.id, tenantId: req.user?.tenantId || 'default' });
     if (!savedMessage) {
       return res.status(400).json({ error: 'Message not saved' });
     }
-    if (USE_POSTGRES_CHAT) {
-      await upsertConvo({ conversationId: message.conversationId, userId: req.user.id, tenantId: req.user?.tenantId || 'default' });
-    } else {
-      await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
-    }
+    await upsertConvo({ conversationId: message.conversationId, userId: req.user.id, tenantId: req.user?.tenantId || 'default' });
     res.status(201).json(savedMessage);
   } catch (error) {
     logger.error('Error saving message:', error);

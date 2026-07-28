@@ -17,13 +17,12 @@ import {
   sendValidationResponse,
   prepareMessageRequestValidation,
 } from '~/server/middleware';
-import db from '~/models';
 import pgChat from '@lemefy/data-schemas';
 
 const router = Router();
 router.use(requireJwtAuth);
 
-const USE_POSTGRES_CHAT = !!process.env.USE_POSTGRES_CHAT;
+
 
 router.get('/', async (req: any, res: any) => {
   try {
@@ -274,21 +273,11 @@ router.post('/:conversationId', validateMessageReq, async (req: any, res: any) =
       isTemporary: req?.body?.isTemporary,
       interfaceConfig: req?.config?.interfaceConfig,
     };
-    const savedMessage = USE_POSTGRES_CHAT
-      ? await pgChat.message.saveMessage({ ...message, user: req.user.id })
-      : await db.saveMessage(
-          reqCtx,
-          { ...message, user: req.user.id },
-          { context: 'POST /api/messages/:conversationId' },
-        );
+    const savedMessage = await pgChat.message.saveMessage({ ...message, user: req.user.id, tenantId: req.user?.tenantId || 'default' });
     if (!savedMessage) {
       return res.status(400).json({ error: 'Message not saved' });
     }
-    if (USE_POSTGRES_CHAT) {
-      await pgChat.conversation.upsertConvo({ conversationId: message.conversationId, userId: req.user.id });
-    } else {
-      await db.saveConvo(reqCtx, savedMessage, { context: 'POST /api/messages/:conversationId' });
-    }
+    await pgChat.conversation.upsertConvo({ conversationId: message.conversationId, userId: req.user.id, tenantId: req.user?.tenantId || 'default' });
     res.status(201).json(savedMessage);
   } catch (error) {
     logger.error('Error saving message:', error);

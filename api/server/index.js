@@ -114,12 +114,15 @@ const startServer = async () => {
   if (typeof Bun !== 'undefined') {
     axios.defaults.headers.common['Accept-Encoding'] = 'gzip';
   }
-  await connectDb();
-
-  logger.info('Connected to MongoDB');
-  indexSync().catch((err) => {
-    logger.error('[indexSync] Background sync failed:', err);
-  });
+  if (process.env.MONGO_URI) {
+    await connectDb();
+    logger.info('Connected to MongoDB');
+    indexSync().catch((err) => {
+      logger.error('[indexSync] Background sync failed:', err);
+    });
+  } else {
+    logger.info('Skipping MongoDB connection - MONGO_URI not configured');
+  }
 
   app.disable('x-powered-by');
   app.set('trust proxy', trusted_proxy);
@@ -131,19 +134,19 @@ const startServer = async () => {
     );
   }
 
-  await runAsSystem(seedDatabase);
-  /* Recover stuck `status: 'pending'` records from a crash mid-render.
-   * `runAsSystem` is required — `File` is tenant-isolated and strict
-   * mode rejects unscoped queries. Lazy sweep in the preview endpoint
-   * covers anything younger than the boot cutoff. */
-  runAsSystem(sweepOrphanedPreviews).catch((err) => {
-    logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
-  });
+  if (process.env.MONGO_URI) {
+    await runAsSystem(seedDatabase);
+    runAsSystem(sweepOrphanedPreviews).catch((err) => {
+      logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
+    });
+  }
   const appConfig = await getAppConfig({ baseOnly: true });
   initializeFileStorage(appConfig);
   await initializeDeploymentSkills({ projectRoot: path.resolve(__dirname, '../..') });
   initializeGitHubSkillSync(appConfig);
-  startExpiredFileSweep({ appConfig, loadAppConfig: getAppConfig });
+  if (process.env.MONGO_URI) {
+    startExpiredFileSweep({ appConfig, loadAppConfig: getAppConfig });
+  }
   // Register any programmatic tool-approval policy hooks declared in
   // `endpoints.agents.toolApproval.hooks`. Honor the `enabled` kill switch: when tool
   // approval is off we pass no hooks, so a disabled endpoint imports/runs nothing (and any

@@ -48,8 +48,8 @@ import { getUserPluginAuthValue } from '~/server/services/PluginService';
 import { updateMCPServerTools } from '~/server/services/Config/mcp';
 import { reinitMCPServer } from '~/server/services/Tools/mcp';
 import { getLogStores } from '~/cache';
-import db from '~/models';
 import pgChat from '@lemefy/data-schemas';
+import { getRoleByName } from '@lemefy/data-schemas';
 
 const router = Router();
 
@@ -82,13 +82,13 @@ const clearGetTokensFlow = async (flowId: string) => {
 const checkMCPUsePermissions = generateCheckAccess({
   permissionType: PermissionTypes.MCP_SERVERS,
   permissions: [Permissions.USE],
-  getRoleByName: db.getRoleByName as any,
+  getRoleByName,
 });
 
 const checkMCPCreate = generateCheckAccess({
   permissionType: PermissionTypes.MCP_SERVERS,
   permissions: [Permissions.USE, Permissions.CREATE],
-  getRoleByName: db.getRoleByName as any,
+  getRoleByName,
 });
 
 router.get('/tools', requireJwtAuth, checkMCPUsePermissions, async (req: any, res: any) => {
