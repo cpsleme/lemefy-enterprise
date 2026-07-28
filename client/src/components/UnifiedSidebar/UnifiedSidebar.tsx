@@ -4,7 +4,8 @@ import { useRecoilState } from 'recoil';
 import { useForm } from 'react-hook-form';
 import { useMediaQuery } from '@lemefy/client';
 import type { ChatFormValues } from '~/common';
-import { ChatContext, ChatFormProvider, ActivePanelProvider } from '~/Providers';
+import type { NavLink } from '~/common';
+import { ChatContext, ChatFormProvider, ActivePanelProvider, useActivePanel } from '~/Providers';
 import useUnifiedSidebarLinks from '~/hooks/Nav/useUnifiedSidebarLinks';
 import { useChatHelpers, useLocalize } from '~/hooks';
 import SidePanelNav from '~/components/SidePanel/Nav';
@@ -39,15 +40,13 @@ function SidebarChatProvider({ children }: { children: ReactNode }) {
   );
 }
 
-function UnifiedSidebar() {
+function SidebarContent({ links }: { links: NavLink[] }) {
   const localize = useLocalize();
   const isSmallScreen = useMediaQuery('(max-width: 768px)');
   const [expanded, setExpanded] = useRecoilState(store.sidebarExpanded);
   const [sidebarWidth, setSidebarWidth] = useState(getInitialWidth);
   const [isResizing, setIsResizing] = useState(false);
   const resizeHandlers = useRef<{ move: (e: MouseEvent) => void; up: () => void } | null>(null);
-
-  const links = useUnifiedSidebarLinks();
 
   const handleCollapse = useCallback(() => {
     startTransition(() => {
@@ -147,12 +146,10 @@ function UnifiedSidebar() {
           inert={!expanded ? '' : undefined}
         >
           <SidebarChatProvider>
-            <ActivePanelProvider>
-              <ExpandedPanel links={links} onCollapse={handleCollapse} />
-              <nav className="min-h-0 flex-1 overflow-hidden bg-surface-primary-alt">
-                <SidePanelNav links={links} />
-              </nav>
-            </ActivePanelProvider>
+            <ExpandedPanel links={links} onCollapse={handleCollapse} />
+            <nav className="min-h-0 flex-1 overflow-hidden bg-surface-primary-alt">
+              <SidePanelNav links={links} />
+            </nav>
           </SidebarChatProvider>
         </div>
         <div
@@ -176,31 +173,42 @@ function UnifiedSidebar() {
 
   return (
     <SidebarChatProvider>
-      <ActivePanelProvider>
-        <aside
-          className="relative flex h-full flex-shrink-0 overflow-hidden"
-          style={{
-            width: expanded ? sidebarWidth : COLLAPSED_WIDTH,
-            minWidth: expanded ? EXPANDED_MIN : COLLAPSED_WIDTH,
-            maxWidth: expanded ? '40%' : COLLAPSED_WIDTH,
-            transition: isResizing
-              ? 'none'
-              : `width ${TRANSITION_MS}ms ${EASING}, min-width ${TRANSITION_MS}ms ${EASING}, max-width ${TRANSITION_MS}ms ${EASING}`,
-          }}
-          aria-label={localize('com_nav_control_panel')}
-        >
-          <Sidebar
-            links={links}
-            expanded={expanded}
-            onCollapse={handleCollapse}
-            onExpand={handleExpand}
-            onResizeStart={handleResizeStart}
-            onResizeKeyboard={handleResizeKeyboard}
-          />
-        </aside>
-      </ActivePanelProvider>
+      <aside
+        className="relative flex h-full flex-shrink-0 overflow-hidden"
+        style={{
+          width: expanded ? sidebarWidth : COLLAPSED_WIDTH,
+          minWidth: expanded ? EXPANDED_MIN : COLLAPSED_WIDTH,
+          maxWidth: expanded ? '40%' : COLLAPSED_WIDTH,
+          transition: isResizing
+            ? 'none'
+            : `width ${TRANSITION_MS}ms ${EASING}, min-width ${TRANSITION_MS}ms ${EASING}, max-width ${TRANSITION_MS}ms ${EASING}`,
+        }}
+        aria-label={localize('com_nav_control_panel')}
+      >
+        <Sidebar
+          links={links}
+          expanded={expanded}
+          onCollapse={handleCollapse}
+          onExpand={handleExpand}
+          onResizeStart={handleResizeStart}
+          onResizeKeyboard={handleResizeKeyboard}
+        />
+      </aside>
     </SidebarChatProvider>
   );
+}
+
+function UnifiedSidebar() {
+  return (
+    <ActivePanelProvider>
+      <SidebarContentWithProvider />
+    </ActivePanelProvider>
+  );
+}
+
+function SidebarContentWithProvider() {
+  const { setActive } = useActivePanel();
+  return <SidebarContent links={useUnifiedSidebarLinks(setActive)} />;
 }
 
 export default memo(UnifiedSidebar);

@@ -12,7 +12,7 @@ import store from '~/store';
 
 const defaultInterface = getConfigDefaults().interface;
 
-export default function useUnifiedSidebarLinks() {
+export default function useUnifiedSidebarLinks(setActive: (id: string) => void) {
   /** Selector instead of the full conversation atom: the links only depend on
    * the endpoint, so parameter edits and other conversation writes stay out. */
   const endpoint = useRecoilValue(store.conversationEndpointByIndex(0)) ?? undefined;
@@ -48,6 +48,7 @@ export default function useUnifiedSidebarLinks() {
     interfaceConfig,
     endpointsConfig,
     includeHidePanel: false,
+    setActive,
   });
 
   const links = useMemo(() => {

@@ -25,7 +25,6 @@ import {
   useGetAgentsConfig,
   useHasAccess,
 } from '~/hooks';
-import { useActivePanel } from '~/Providers';
 import MCPBuilderPanel from '~/components/SidePanel/MCPBuilder/MCPBuilderPanel';
 import AgentPanelSwitch from '~/components/SidePanel/Agents/AgentPanelSwitch';
 import BookmarkPanel from '~/components/SidePanel/Bookmarks/BookmarkPanel';
@@ -43,6 +42,7 @@ export default function useSideNavLinks({
   interfaceConfig,
   endpointsConfig,
   includeHidePanel = true,
+  setActive,
 }: {
   hidePanel?: () => void;
   keyProvided: boolean;
@@ -51,9 +51,9 @@ export default function useSideNavLinks({
   interfaceConfig: Partial<TInterfaceConfig>;
   endpointsConfig: TEndpointsConfig;
   includeHidePanel?: boolean;
+  setActive?: (id: string) => void;
 }) {
   const navigate = useNavigate();
-  const { setActive } = useActivePanel();
 
   const hasAccessToPrompts = useHasAccess({
     permissionType: PermissionTypes.PROMPTS,

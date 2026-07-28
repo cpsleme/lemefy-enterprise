@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  postgres:
+    container_name: lemefy-postgres
+    image: pgvector/pgvector:pg15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_password}
+      POSTGRES_DB: lemefy
+    volumes:
+      - postgres_pgdata:/var/lib/postgresql/data
+      - ./config/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5432:5432"
+
+  mongodb:
+    container_name: lemefy-mongodb
+    image: mongo:7
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-root_password}
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "27017:27017"
+
+  api:
+    container_name: lemefy-api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3080}:${PORT:-3080}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    restart: always
+    user: "${UID:-1000}:${GID:-1000}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=${PORT:-3080}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=lemefy
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres_password}
+      - MONGO_URI=mongodb://root:${MONGO_ROOT_PASSWORD:-root_password}@mongodb:27017/Lemefy?authSource=admin
+      - USE_POSTGRES_CHAT=true
+      - JWT_SECRET=${JWT_SECRET:-7acaaa0e34bd913ba3a150a618f145148a2f4cdccc3b63ca62e3d94068e450cf}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-2d8012e01eb8b1a53938d449f05d94adafb90c21d355bdb6b011f1ae9381712d}
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+      - ./skill:/app/skill
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3080}/readyz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  postgres_pgdata:
+  mongodb_data:
