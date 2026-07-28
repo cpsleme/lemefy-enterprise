@@ -65,6 +65,7 @@ export {
   deleteConvos,
   saveMessage,
   getMessages,
+  getMessagesByCursor,
   updateMessage,
   deleteMessages,
   createChatProject,
@@ -77,4 +78,5 @@ export {
   deleteChatCheckpoints,
   upsertConvo,
   deleteToolCalls,
+  searchMessages,
 } from './db/chat/repositories';

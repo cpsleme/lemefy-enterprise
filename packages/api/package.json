@@ -12,6 +12,7 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./*": "./dist/index.cjs",
     "./telemetry": {
       "require": {
         "types": "./dist/telemetry.d.cts",
@@ -116,8 +117,8 @@
     "@azure/storage-blob": "^12.30.0",
     "@google/genai": "^2.8.0",
     "@keyv/redis": "^4.3.3",
-    "@librechat/agents": "^3.2.68",
     "@lemefy/data-schemas": "*",
+    "@librechat/agents": "^3.2.68",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/instrumentation-express": "^0.56.0",
@@ -169,6 +170,7 @@
   },
   "dependencies": {
     "@langchain/langgraph-checkpoint": "^1.1.2",
-    "@langchain/langgraph-checkpoint-mongodb": "^1.4.0"
+    "@langchain/langgraph-checkpoint-mongodb": "^1.4.0",
+    "openid-client": "^6.8.4"
   }
 }
