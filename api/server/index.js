@@ -114,12 +114,15 @@ const startServer = async () => {
   if (typeof Bun !== 'undefined') {
     axios.defaults.headers.common['Accept-Encoding'] = 'gzip';
   }
-  if (process.env.MONGO_URI) {
+  const USE_POSTGRES_ALL = process.env.USE_POSTGRES_ALL === 'true';
+  if (process.env.MONGO_URI && !USE_POSTGRES_ALL) {
     await connectDb();
     logger.info('Connected to MongoDB');
     indexSync().catch((err) => {
       logger.error('[indexSync] Background sync failed:', err);
     });
+  } else if (USE_POSTGRES_ALL) {
+    logger.info('Using PostgreSQL for all data (USE_POSTGRES_ALL=true)');
   } else {
     logger.info('Skipping MongoDB connection - MONGO_URI not configured');
   }
@@ -134,7 +137,7 @@ const startServer = async () => {
     );
   }
 
-  if (process.env.MONGO_URI) {
+  if (process.env.MONGO_URI && !USE_POSTGRES_ALL) {
     await runAsSystem(seedDatabase);
     runAsSystem(sweepOrphanedPreviews).catch((err) => {
       logger.error('[sweepOrphanedPreviews] Background sweep failed:', err);
@@ -144,7 +147,7 @@ const startServer = async () => {
   initializeFileStorage(appConfig);
   await initializeDeploymentSkills({ projectRoot: path.resolve(__dirname, '../..') });
   initializeGitHubSkillSync(appConfig);
-  if (process.env.MONGO_URI) {
+  if (process.env.MONGO_URI && !USE_POSTGRES_ALL) {
     startExpiredFileSweep({ appConfig, loadAppConfig: getAppConfig });
   }
   // Register any programmatic tool-approval policy hooks declared in
