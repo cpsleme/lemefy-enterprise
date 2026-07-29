@@ -101,7 +101,7 @@ async function seedDefaultRoles() { await initializeRoles(); }
 async function ensureDefaultCategories() {}
 async function seedSystemGrants() {}
 
-async function findUser(filter) {
+async function findUser(filter, includePassword = false) {
   const { _id, id, email, username } = filter || {};
   let q = 'SELECT * FROM users';
   const params = [];
@@ -116,7 +116,40 @@ async function findUser(filter) {
     params.push(username);
   }
   const result = await query(q + ' LIMIT 1', params);
-  return result.rows[0] || null;
+  if (result.rows.length === 0) return null;
+  
+  const user = result.rows[0];
+  // Add password field if it exists in the database and was requested
+  if (includePassword === '+password' && user.password_hash) {
+    user.password = user.password_hash;
+  }
+  // Map PostgreSQL snake_case fields to camelCase for compatibility
+  if (user.email_verified !== undefined) {
+    user.emailVerified = user.email_verified;
+    delete user.email_verified;
+  }
+  if (user.password_hash !== undefined) {
+    user.passwordHash = user.password_hash;
+  }
+  if (user.created_at !== undefined) {
+    user.createdAt = user.created_at;
+    delete user.created_at;
+  }
+  if (user.updated_at !== undefined) {
+    user.updatedAt = user.updated_at;
+    delete user.updated_at;
+  }
+  if (user.tenant_id !== undefined) {
+    user.tenantId = user.tenant_id;
+    delete user.tenant_id;
+  }
+  if (user.balance !== undefined) {
+    // balance is already JSONB, no change needed
+  }
+  if (user.config !== undefined) {
+    // config is already JSONB, no change needed
+  }
+  return user;
 }
 
 async function createUser(userData) {
@@ -225,6 +258,19 @@ module.exports = {
   getGroup: stubFn('getGroup'),
   updateAccessPermissions: stubFn('updateAccessPermissions'),
   getApplicableConfigs: stubFn('getApplicableConfigs', []),
+  createSession: async () => {
+    const expDate = new Date(Date.now() + 86400000);
+    return {
+      session: { _id: 'session_123', expiration: expDate },
+      refreshToken: 'stub_refresh_token'
+    };
+  },
+  generateRefreshToken: stubFn('generateRefreshToken', () => 'stub_refresh_token'),
+  generateToken: stubFn('generateToken', () => 'stub_token'),
+  findSession: stubFn('findSession'),
+  findSessions: stubFn('findSessions', []),
+  deleteSession: stubFn('deleteSession'),
+  deleteAllUserSessions: stubFn('deleteAllUserSessions'),
   seedDatabase,
   _pool: pool,
 };

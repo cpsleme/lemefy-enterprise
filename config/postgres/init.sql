@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS users (
   tenant_id VARCHAR(255) DEFAULT 'default',
   balance JSONB DEFAULT '{}',
   config JSONB DEFAULT '{}',
+  email_verified BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -54,10 +55,10 @@ VALUES
 ON CONFLICT (_id) DO NOTHING;
 
 -- Insert default users if not exists
-INSERT INTO users (_id, email, username, password_hash, role, roles, tenant_id) 
+INSERT INTO users (_id, email, username, password_hash, role, roles, tenant_id, email_verified) 
 VALUES 
-  ('6789abcd0123456789012348', 'admin@lemefy.ai', 'admin', '$2b$10$N9qo8uLOickgx2ZMRZoMy.MH9J3mYFQzYJf3k7gF8Y9v5c0d2e0e', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default'),
-  ('6789abcd0123456789012349', 'admin@lemefy.com', 'admin', '$2b$10$N9qo8uLOickgx2ZMRZoMy.MH9J3mYFQzYJf3k7gF8Y9v5c0d2e0e', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default')
+  ('6789abcd0123456789012348', 'admin@lemefy.ai', 'admin', '$2a$10$i3.CRhqZPP6vYDY7EYYs.uXrsK8GgwJLTxv7LO408KclHlZT7rfdu', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default', true),
+  ('6789abcd0123456789012349', 'admin@lemefy.com', 'admin', '$2a$10$i3.CRhqZPP6vYDY7EYYs.uXrsK8GwJLTxv7LO408KclHlZT7rfdu', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default', true)
 ON CONFLICT (_id) DO NOTHING;
 
 -- Create indexes
