@@ -1,9 +1,22 @@
 require('dotenv').config();
+const MONGO_URI = process.env.MONGO_URI;
+const USE_POSTGRES_ALL = process.env.USE_POSTGRES_ALL === 'true';
+
+// Skip all MongoDB-related code when using PostgreSQL exclusively
+if (USE_POSTGRES_ALL) {
+  // Provide no-op exports
+  module.exports = {
+    connectDb: async () => {
+      const { logger } = require('@lemefy/data-schemas');
+      logger.info('[connectDb] Using PostgreSQL for all data (USE_POSTGRES_ALL=true)');
+    },
+  };
+  return;
+}
+
 const { isEnabled, instrumentMongooseQueryMetrics } = require('@lemefy/api');
 const { logger } = require('@lemefy/data-schemas');
-
 const mongoose = require('mongoose');
-const MONGO_URI = process.env.MONGO_URI;
 
 instrumentMongooseQueryMetrics(mongoose);
 

@@ -2,12 +2,32 @@ const { Keyv } = require('keyv');
 const uap = require('ua-parser-js');
 const { logger } = require('@lemefy/data-schemas');
 const { ViolationTypes } = require('lemefy-data-provider');
-const { isEnabled, keyvMongo, removePorts } = require('@lemefy/api');
+const { isEnabled, removePorts } = require('@lemefy/api');
 const { getLogStores } = require('~/cache');
 const denyRequest = require('./denyRequest');
 const { findUser } = require('~/models');
 
-const banCache = new Keyv({ store: keyvMongo, namespace: ViolationTypes.BAN, ttl: 0 });
+// When USE_POSTGRES_ALL is enabled, we use a simple in-memory cache for bans
+// In production with PostgreSQL, you should implement a proper PostgreSQL-based cache
+const USE_POSTGRES_ALL = process.env.USE_POSTGRES_ALL === 'true';
+let banCache;
+if (USE_POSTGRES_ALL) {
+  // Simple in-memory cache for PostgreSQL mode
+  // TODO: Replace with PostgreSQL-based cache implementation
+  const memoryStore = new Map();
+  banCache = {
+    get: async (key) => memoryStore.get(key),
+    set: async (key, value, ttl) => {
+      if (ttl > 0) {
+        setTimeout(() => memoryStore.delete(key), ttl);
+      }
+      memoryStore.set(key, value);
+    }
+  };
+} else {
+  const { keyvMongo } = require('@lemefy/api');
+  banCache = new Keyv({ store: keyvMongo, namespace: ViolationTypes.BAN, ttl: 0 });
+}
 const message = 'Your account has been temporarily banned due to violations of our service.';
 
 /** @returns {string} Cache key for ban lookups, prefixed for Redis or raw for MongoDB */

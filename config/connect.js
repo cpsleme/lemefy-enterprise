@@ -5,7 +5,13 @@ const moduleAlias = require('module-alias');
 const basePath = path.resolve(__dirname, '..', 'api');
 moduleAlias.addAlias('~', basePath);
 
-const { connectDb } = require('~/db/connect');
+const USE_POSTGRES_ALL = process.env.USE_POSTGRES_ALL === 'true';
+
+// Only import MongoDB-related modules if not using PostgreSQL exclusively
+if (!USE_POSTGRES_ALL) {
+  const { connectDb } = require('~/db/connect');
+}
+
 require('./helpers');
 
 async function connect() {
@@ -13,6 +19,11 @@ async function connect() {
    * Connect to the database
    * - If it takes a while, we'll warn the user
    */
+  if (USE_POSTGRES_ALL) {
+    console.orange('Using PostgreSQL for all data (USE_POSTGRES_ALL=true)');
+    return;
+  }
+
   let timeout = setTimeout(() => {
     console.orange(
       'This is taking a while... You may need to check your connection if this fails.',
@@ -27,6 +38,7 @@ async function connect() {
   // Attempt to connect to the database
   try {
     console.orange('Warming up the engines...');
+    const { connectDb } = require('~/db/connect');
     await connectDb();
     clearTimeout(timeout);
   } catch (e) {

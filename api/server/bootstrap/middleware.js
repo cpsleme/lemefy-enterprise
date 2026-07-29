@@ -4,7 +4,6 @@ module.exports = async function registerMiddleware(app, deps) {
     metricsMiddleware,
     noIndex,
     handleJsonParseError,
-    mongoSanitize,
     cors,
     cookieParser,
     compression,
@@ -34,16 +33,6 @@ module.exports = async function registerMiddleware(app, deps) {
   app.use(express.urlencoded({ extended: true, limit: '3mb' }));
   app.use(handleJsonParseError);
 
-  app.use((req, _res, next) => {
-    Object.defineProperty(req, 'query', {
-      ...Object.getOwnPropertyDescriptor(req, 'query'),
-      value: req.query,
-      writable: true,
-    });
-    next();
-  });
-
-  app.use(mongoSanitize());
   app.use(cors());
   app.use(cookieParser());
 

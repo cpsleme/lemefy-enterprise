@@ -12,20 +12,6 @@ module.exports = function registerHealthRoutes(app) {
     return res.status(ready ? 200 : 503).send(ready ? 'OK' : 'NOT_READY');
   });
 
-  app.get('/health/mongo', async (_req, res) => {
-    try {
-      const dataSchemas = require('@lemefy/data-schemas');
-      const client = dataSchemas?.client;
-      if (client?.db?.admin) {
-        await client.db.admin().ping();
-        return res.status(200).send('OK');
-      }
-      res.status(503).send('Mongo client unavailable');
-    } catch (error) {
-      res.status(503).send('Mongo not ready');
-    }
-  });
-
   app.get('/health/meilisearch', async (_req, res) => {
     try {
       const axios = require('axios');

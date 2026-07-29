@@ -4,11 +4,17 @@ const path = require('path');
 const cors = require('cors');
 const compression = require('compression');
 const cookieParser = require('cookie-parser');
-const mongoSanitize = require('express-mongo-sanitize');
 const passport = require('passport');
 const { parse: parseEnv } = require('./config/env.validate');
 require('module-alias')({ base: path.resolve(__dirname, '..') });
 parseEnv();
+
+// When USE_POSTGRES_ALL is true, ensure MongoDB is completely disabled
+const USE_POSTGRES_ALL = process.env.USE_POSTGRES_ALL === 'true';
+if (USE_POSTGRES_ALL) {
+  // Override MONGO_URI to ensure no MongoDB connections are attempted
+  process.env.MONGO_URI = '';
+}
 const axios = require('axios');
 const express = require('express');
 const { logger, runAsSystem, tenantStorage } = require('@lemefy/data-schemas');
@@ -32,7 +38,23 @@ const {
   setupGracefulShutdown,
   updateInterfacePermissions,
 } = require('~/adapters/app');
-const { connectDb, indexSync } = require('~/db');
+
+// Conditionally import MongoDB-related modules only when not using PostgreSQL exclusively
+let connectDb, indexSync;
+if (!USE_POSTGRES_ALL) {
+  try {
+    ({ connectDb, indexSync } = require('~/db'));
+  } catch (err) {
+    logger.warn('[startup] Failed to load MongoDB modules:', err.message);
+  }
+} else {
+  // When using PostgreSQL exclusively, provide no-op functions
+  connectDb = async () => {
+    logger.info('[connectDb] Using PostgreSQL for all data (USE_POSTGRES_ALL=true)');
+  };
+  indexSync = async () => {};
+}
+
 const {
   updateAccessPermissions,
   sweepOrphanedPreviews,
@@ -205,7 +227,6 @@ const startServer = async () => {
     noIndex,
     express,
     handleJsonParseError,
-    mongoSanitize,
     cors,
     cookieParser,
     compression,

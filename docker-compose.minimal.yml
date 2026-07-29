@@ -47,6 +47,7 @@ services:
       - USE_POSTGRES_ALL=true
       - JWT_SECRET=${JWT_SECRET:-7acaaa0e34bd913ba3a150a618f145148a2f4cdccc3b63ca62e3d94068e450cf}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-2d8012e01eb8b1a53938d449f05d94adafb90c21d355bdb6b011f1ae9381712d}
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-masterKey}
     volumes:
       - ./.env:/app/.env:ro
       - ./uploads:/app/uploads
