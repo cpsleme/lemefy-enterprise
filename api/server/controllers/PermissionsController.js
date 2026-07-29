@@ -2,7 +2,6 @@
  * @import { TUpdateResourcePermissionsRequest, TUpdateResourcePermissionsResponse } from 'lemefy-data-provider'
  */
 
-const mongoose = require('mongoose');
 const { logger, getTenantId, SYSTEM_TENANT_ID } = require('@lemefy/data-schemas');
 const { ResourceType, PrincipalType, PermissionBits } = require('lemefy-data-provider');
 const { enrichRemoteAgentPrincipals, backfillRemoteAgentPermissions } = require('@lemefy/api');
@@ -205,9 +204,7 @@ const getResourcePermissions = async (req, res) => {
       {
         $match: {
           resourceType,
-          resourceId: mongoose.Types.ObjectId.isValid(resourceId)
-            ? mongoose.Types.ObjectId.createFromHexString(resourceId)
-            : resourceId,
+          resourceId: resourceId,
         },
       },
       // Lookup AccessRole information

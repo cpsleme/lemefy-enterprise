@@ -178,7 +178,7 @@ async function hasCapabilityForPrincipals(principals, capability) {
 }
 
 // Stub functions
-const stubFn = (name) => (...args) => { logger.warn(`[postgres-all] Stub: ${name}`); return null; };
+const stubFn = (name, returnValue = null) => (...args) => { logger.warn(`[postgres-all] Stub: ${name}`); return returnValue; };
 
 const seedDatabase = async () => {
   await initializeRoles();
@@ -224,6 +224,7 @@ module.exports = {
   updateRoleByName: stubFn('updateRoleByName'),
   getGroup: stubFn('getGroup'),
   updateAccessPermissions: stubFn('updateAccessPermissions'),
+  getApplicableConfigs: stubFn('getApplicableConfigs', []),
   seedDatabase,
   _pool: pool,
 };

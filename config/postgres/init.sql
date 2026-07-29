@@ -53,10 +53,11 @@ VALUES
   ('6789abcd0123456789012347', 'SUPER_ADMIN', 'Super administrator role', '{"read": true, "write": true, "admin": true, "super_admin": true}')
 ON CONFLICT (_id) DO NOTHING;
 
--- Insert default user if not exists
-INSERT INTO users (_id, email, username, role, roles, tenant_id) 
+-- Insert default users if not exists
+INSERT INTO users (_id, email, username, password_hash, role, roles, tenant_id) 
 VALUES 
-  ('6789abcd0123456789012348', 'admin@lemefy.ai', 'admin', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default')
+  ('6789abcd0123456789012348', 'admin@lemefy.ai', 'admin', '$2b$10$N9qo8uLOickgx2ZMRZoMy.MH9J3mYFQzYJf3k7gF8Y9v5c0d2e0e', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default'),
+  ('6789abcd0123456789012349', 'admin@lemefy.com', 'admin', '$2b$10$N9qo8uLOickgx2ZMRZoMy.MH9J3mYFQzYJf3k7gF8Y9v5c0d2e0e', 'SUPER_ADMIN', '["SUPER_ADMIN"]', 'default')
 ON CONFLICT (_id) DO NOTHING;
 
 -- Create indexes
